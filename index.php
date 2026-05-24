@@ -4,25 +4,40 @@ error_reporting(E_ALL);
 
 $api="https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
 
-if($_SERVER['REQUEST_METHOD']==='POST'){
+function getData($url){
 
-if(isset($_POST['name'])){
-$url=$api."?action=set_name&ip=".urlencode($_POST['ip'])."&name=".urlencode($_POST['name']);
-file_get_contents($url);
-}
+$ch=curl_init($url);
 
-header("Location: /");
-exit;
-}
-
-$ch=curl_init($api);
 curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
 curl_setopt($ch,CURLOPT_FOLLOWLOCATION,true);
-$json=curl_exec($ch);
+curl_setopt($ch,CURLOPT_TIMEOUT,15);
+curl_setopt($ch,CURLOPT_SSL_VERIFYPEER,false);
+curl_setopt($ch,CURLOPT_USERAGENT,'Mozilla/5.0');
+
+$response=curl_exec($ch);
+$error=curl_error($ch);
+$http=curl_getinfo($ch,CURLINFO_HTTP_CODE);
+
 curl_close($ch);
 
+return [
+'response'=>$response,
+'error'=>$error,
+'http'=>$http
+];
+
+}
+
+$data=getData($api);
+
+$json=$data['response'];
+
 $devices=json_decode($json,true);
-if(!is_array($devices))$devices=[];
+
+$jsonError=json_last_error_msg();
+
+$valid=is_array($devices);
+
 ?>
 
 <!DOCTYPE html>
@@ -30,45 +45,64 @@ if(!is_array($devices))$devices=[];
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PC Panel</title>
+<title>PC Panel Debug</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
 body{background:#0f172a;color:white;font-family:Arial}
-.card{background:#111827;border:1px solid #1f2937;border-radius:14px;padding:15px}
-input{background:#0b1220!important;color:white!important;border:1px solid #334155!important}
+.box{background:#111827;padding:15px;border-radius:12px;margin-bottom:15px}
+.bad{color:#ef4444}
+.good{color:#22c55e}
 </style>
 </head>
 <body>
 <div class="container py-4">
-<h2>🖥 PC Panel</h2>
+
+<h2>🖥 PC Panel DEBUG</h2>
+
+<div class="box">
+<h4>HTTP CODE:</h4>
+<pre><?php var_dump($data['http']); ?></pre>
+
+<h4>CURL ERROR:</h4>
+<pre class="bad"><?php var_dump($data['error']); ?></pre>
+
+<h4>RAW RESPONSE:</h4>
+<pre><?php echo htmlspecialchars($json); ?></pre>
+
+<h4>JSON ERROR:</h4>
+<pre class="bad"><?php var_dump($jsonError); ?></pre>
+
+<h4>IS VALID JSON:</h4>
+<pre><?php var_dump($valid); ?></pre>
+</div>
+
+<hr>
+
+<h3>DATA:</h3>
+
+<?php if(!$valid): ?>
+<div class="box bad">
+❌ Данные не загружены или не JSON
+</div>
+<?php else: ?>
 
 <div class="row g-3">
 
 <?php foreach($devices as $d): ?>
-
 <div class="col-md-4">
-<div class="card">
-
-<h5><?= $d['name'] ? htmlspecialchars($d['name']) : "⚠️ Новый ПК" ?></h5>
-
-<p>Time: <?=htmlspecialchars($d['time'])?></p>
-<p>IP: <?=htmlspecialchars($d['ip'])?></p>
-<p>Status: <?=htmlspecialchars($d['status'])?></p>
-
-<?php if(empty($d['name'])): ?>
-<form method="POST">
-<input type="hidden" name="ip" value="<?=htmlspecialchars($d['ip'])?>">
-<input class="form-control mb-2" name="name" placeholder="Имя ПК" required>
-<button class="btn btn-primary w-100">Сохранить</button>
-</form>
-<?php endif; ?>
-
+<div class="box">
+<b>Name:</b> <?=htmlspecialchars($d['name']??'')?> <br>
+<b>IP:</b> <?=htmlspecialchars($d['ip']??'')?> <br>
+<b>Status:</b> <?=htmlspecialchars($d['status']??'')?> <br>
+<b>Time:</b> <?=htmlspecialchars($d['time']??'')?>
 </div>
 </div>
-
 <?php endforeach; ?>
 
 </div>
+
+<?php endif; ?>
+
 </div>
 </body>
 </html>
