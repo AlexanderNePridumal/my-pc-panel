@@ -1,4 +1,11 @@
 <?php
+// Даем права на запись, если файл не существует
+if (!file_exists('data.txt')) {
+    file_put_contents('data.txt', 'none');
+    chmod('data.txt', 0777); 
+}
+
+<?php
 $dataFile = __DIR__ . '/data.txt';
 if (!file_exists($dataFile)) file_put_contents($dataFile, 'none');
 
