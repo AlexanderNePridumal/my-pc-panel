@@ -1,7 +1,7 @@
 <?php
 // Ссылка на твою опубликованную таблицу в формате CSV
 // В таблице: Файл -> Поделиться -> Опубликовать в интернете -> Выбрать "Значения, разделенные запятыми (.csv)"
-$csvUrl = "ССЫЛКА_НА_CSV_ИЗ_GOOGLE_SHEETS"; 
+$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?gid=0&single=true&output=csv"; 
 
 $data = file_get_contents($csvUrl);
 $rows = array_map('str_getcsv', explode("\n", $data));
