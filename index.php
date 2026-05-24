@@ -16,10 +16,21 @@ header("Location: /");
 exit;
 
 }
+$ch=curl_init($api);
 
-$json=file_get_contents($api);
+curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+
+curl_setopt($ch,CURLOPT_FOLLOWLOCATION,true);
+
+$json=curl_exec($ch);
+
+curl_close($ch);
 
 $devices=json_decode($json,true);
+
+if(!$devices){
+$devices=[];
+}
 
 ?>
 
