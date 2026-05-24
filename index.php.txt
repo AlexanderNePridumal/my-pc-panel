@@ -1,40 +1,52 @@
 <?php
-// Koyeb работает в контейнере, пишем файлы в локальную директорию
-$cmdFile = __DIR__ . '/command.txt';
-$logFile = __DIR__ . '/log.txt';
-$screenFile = __DIR__ . '/screenshot.jpg';
+// Включаем сессии, чтобы Vercel мог хранить команды и логи в памяти сервера
+session_start();
 
+// Если файлов сессии еще нет, создаем их пустыми
+if (!isset($_SESSION['cmd'])) $_SESSION['cmd'] = 'none';
+if (!isset($_SESSION['log'])) $_SESSION['log'] = 'Нет данных от ПК';
+if (!isset($_SESSION['screen'])) $_SESSION['screen'] = '';
+if (!isset($_SESSION['screen_time'])) $_SESSION['screen_time'] = 'нет';
+
+// 1. Программа запрашивает команду
 if (isset($_GET['get_cmd'])) {
-    echo file_exists($cmdFile) ? file_get_contents($cmdFile) : "none";
+    echo $_SESSION['cmd'];
     exit;
 }
+
+// 2. Программа стирает команду после выполнения
 if (isset($_GET['clear_cmd'])) {
-    file_put_contents($cmdFile, 'none');
+    $_SESSION['cmd'] = 'none';
     echo "ok";
     exit;
 }
+
+// 3. Программа присылает текстовый отчет
 if (isset($_POST['report'])) {
-    file_put_contents($logFile, $_POST['report']);
+    $_SESSION['log'] = $_POST['report'];
     echo "ok";
     exit;
 }
+
+// 4. Программа присылает скриншот (сохраняем картинку прямо в память в виде текста Base64)
 if (isset($_FILES['screen'])) {
-    move_uploaded_file($_FILES['screen']['tmp_name'], $screenFile);
+    $imgData = file_get_contents($_FILES['screen']['tmp_name']);
+    $_SESSION['screen'] = base64_encode($imgData);
+    $_SESSION['screen_time'] = date("H:i:s");
     echo "ok";
     exit;
 }
+
+// 5. Кнопка на сайте ставит новую команду
 if (isset($_POST['set_cmd'])) {
     $cmd = $_POST['set_cmd'];
     if ($cmd == 'delete' && !empty($_POST['proc_name'])) {
         $cmd .= ' ' . trim($_POST['proc_name']);
     }
-    file_put_contents($cmdFile, $cmd);
+    $_SESSION['cmd'] = $cmd;
     header("Location: index.php");
     exit;
 }
-$currentCmd = file_exists($cmdFile) ? file_get_contents($cmdFile) : 'none';
-$currentLog = file_exists($logFile) ? file_get_contents($logFile) : 'Нет данных от ПК';
-$screenTime = file_exists($screenFile) ? date("H:i:s", filemtime($screenFile)) : 'нет';
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -62,8 +74,8 @@ $screenTime = file_exists($screenFile) ? date("H:i:s", filemtime($screenFile)) :
 </head>
 <body>
 <div class="container">
-    <h1>🖥 Моя Контрольная Панель</h1>
-    <div class="status-bar">Ожидающая команда: <span style="color: #60a5fa; font-weight:bold;"><?php echo htmlspecialchars($currentCmd); ?></span></div>
+    <h1>🖥 Моя Контрольная Панель (Vercel Cloud)</h1>
+    <div class="status-bar">Ожидающая команда: <span style="color: #60a5fa; font-weight:bold;"><?php echo htmlspecialchars($_SESSION['cmd']); ?></span></div>
     <div class="section-title">🎮 Команды управления</div>
     <div class="grid">
         <form method="POST" style="display:contents;"><button name="set_cmd" value="screen">📸 Сделать Скриншот</button></form>
@@ -76,11 +88,11 @@ $screenTime = file_exists($screenFile) ? date("H:i:s", filemtime($screenFile)) :
         </form>
     </div>
     <div class="section-title">📋 Отчет о процессах / Системный лог</div>
-    <div class="console"><?php echo htmlspecialchars($currentLog); ?></div>
+    <div class="console"><?php echo htmlspecialchars($_SESSION['log']); ?></div>
     <div class="screen-box">
-        <div class="section-title" style="margin-bottom:15px;">📺 Монитор экрана (Обновлен: <?php echo $screenTime; ?>)</div>
-        <?php if(file_exists($screenFile)): ?>
-            <img src="<?php echo $screenFile; ?>?t=<?php echo time(); ?>" alt="Экран ПК">
+        <div class="section-title" style="margin-bottom:15px;">📺 Монитор экрана (Обновлен: <?php echo $_SESSION['screen_time']; ?>)</div>
+        <?php if(!empty($_SESSION['screen'])): ?>
+            <img src="data:image/jpeg;base64,<?php echo $_SESSION['screen']; ?>" alt="Экран ПК">
         <?php else: ?>
             <p style="color: #6b7280; font-style: italic;">Скриншотов пока не поступало</p>
         <?php endif; ?>
