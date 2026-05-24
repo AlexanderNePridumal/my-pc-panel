@@ -1,12 +1,23 @@
+
 <?php
 
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
+$scriptUrl ="https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
+
+$csvUrl =
+"https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
 
 $scriptUrl =
 "https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
+
+/*
+|--------------------------------------------------------------------------
+| СОХРАНЕНИЕ / УДАЛЕНИЕ ИМЕНИ
+|--------------------------------------------------------------------------
+*/
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -19,25 +30,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
-    curl_exec($ch);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+    $response = curl_exec($ch);
 
     curl_close($ch);
-
-    sleep(1);
 
     header("Location: /");
 
     exit;
 }
 
-$ch = curl_init($csvUrl);  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);  $data = curl_exec($ch);  curl_close($ch);
-echo "<pre>";
-echo htmlspecialchars($data);
-echo "</pre>";
-exit;
+/*
+|--------------------------------------------------------------------------
+| ЗАГРУЗКА CSV
+|--------------------------------------------------------------------------
+*/
+
+$ch = curl_init($csvUrl);
+
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+$data = curl_exec($ch);
+
+curl_close($ch);
+
 if (!$data) {
-    die("CSV пуст");
+    die("Ошибка загрузки CSV");
 }
+
+/*
+|--------------------------------------------------------------------------
+| ПАРСИНГ CSV
+|--------------------------------------------------------------------------
+*/
 
 $rows = array_map(
     'str_getcsv',
@@ -45,10 +75,12 @@ $rows = array_map(
 );
 
 $newDevices = [];
+
 $knownDevices = [];
 
 foreach ($rows as $index => $row) {
 
+    // пропускаем заголовки
     if ($index == 0)
         continue;
 
@@ -58,10 +90,12 @@ foreach ($rows as $index => $row) {
     $ip = trim($row[1]);
 
     $device = [
-        'time' => $row[0],
-        'status' => $row[2],
-        'name' => trim($row[3])
+        'time'   => trim($row[0]),
+        'status' => trim($row[2]),
+        'name'   => trim($row[3])
     ];
+
+    // новые ПК без имени
 
     if (empty($device['name'])) {
 
@@ -72,14 +106,25 @@ foreach ($rows as $index => $row) {
         $knownDevices[$ip] = $device;
     }
 }
+
 ?>
+
 <!DOCTYPE html>
+
 <html lang="ru">
+
 <head>
 
 <meta charset="UTF-8">
 
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<meta name="viewport"
+content="width=device-width, initial-scale=1">
+
+<title>PC Panel</title>
+
+<link
+href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+rel="stylesheet">
 
 <style>
 
@@ -92,6 +137,22 @@ body{
     color:white;
 }
 
+.card{
+    background:#1e293b;
+    border:none;
+    border-radius:12px;
+}
+
+input{
+    background:#0f172a !important;
+    color:white !important;
+    border:1px solid #334155 !important;
+}
+
+input::placeholder{
+    color:#94a3b8 !important;
+}
+
 </style>
 
 </head>
@@ -100,25 +161,39 @@ body{
 
 <div class="container">
 
-<h2 class="mb-4">Новые ПК</h2>
+<h2 class="mb-4">
+🖥 Новые ПК
+</h2>
 
-<table class="table table-dark table-bordered">
+<?php if(empty($newDevices)): ?>
 
-<tr>
-<th>IP</th>
-<th>Статус</th>
-<th>Имя</th>
-</tr>
+<div class="alert alert-success">
+Новых ПК нет
+</div>
+
+<?php else: ?>
+
+<div class="row g-3">
 
 <?php foreach($newDevices as $ip => $d): ?>
 
-<tr>
+<div class="col-md-4">
 
-<td><?= htmlspecialchars($ip) ?></td>
+<div class="card p-3">
 
-<td><?= htmlspecialchars($d['status']) ?></td>
+<h5 class="mb-3">
+⚠️ Новый ПК
+</h5>
 
-<td>
+<p>
+<b>IP:</b>
+<?= htmlspecialchars($ip) ?>
+</p>
+
+<p>
+<b>Статус:</b>
+<?= htmlspecialchars($d['status']) ?>
+</p>
 
 <form method="POST">
 
@@ -130,45 +205,64 @@ value="1">
 name="ip"
 value="<?= htmlspecialchars($ip) ?>">
 
-<input type="text"
+<input
+type="text"
 name="name"
-class="form-control mb-2"
-placeholder="Имя ПК">
+class="form-control mb-3"
+placeholder="Введите имя ПК"
+required>
 
-<button class="btn btn-success btn-sm">
+<button
+class="btn btn-success w-100">
+
 Сохранить
+
 </button>
 
 </form>
 
-</td>
+</div>
 
-</tr>
+</div>
 
 <?php endforeach; ?>
 
-</table>
+</div>
 
-<h2 class="mt-5 mb-4">Известные ПК</h2>
+<?php endif; ?>
 
-<table class="table table-dark table-bordered">
+<h2 class="mt-5 mb-4">
+✅ Известные ПК
+</h2>
 
-<tr>
-<th>Имя</th>
-<th>IP</th>
-<th>Статус</th>
-<th>Последний сигнал</th>
-</tr>
+<?php if(empty($knownDevices)): ?>
+
+<div class="alert alert-warning">
+Нет известных ПК
+</div>
+
+<?php else: ?>
+
+<div class="row g-3">
 
 <?php foreach($knownDevices as $ip => $d): ?>
 
-<tr>
+<div class="col-md-4">
 
-<td><?= htmlspecialchars($d['name']) ?></td>
+<div class="card p-3">
 
-<td><?= htmlspecialchars($ip) ?></td>
+<h4>
+<?= htmlspecialchars($d['name']) ?>
+</h4>
 
-<td>
+<p class="mb-1">
+<b>IP:</b>
+<?= htmlspecialchars($ip) ?>
+</p>
+
+<p class="mb-1">
+
+<b>Статус:</b>
 
 <?php
 echo $d['status'] == 'online'
@@ -176,17 +270,44 @@ echo $d['status'] == 'online'
     : '🔴 Offline';
 ?>
 
-</td>
+</p>
 
-<td><?= htmlspecialchars($d['time']) ?></td>
+<p>
+<b>Последний сигнал:</b><br>
+<?= htmlspecialchars($d['time']) ?>
+</p>
 
-</tr>
+<form method="POST">
+
+<input type="hidden"
+name="delete_name"
+value="1">
+
+<input type="hidden"
+name="ip"
+value="<?= htmlspecialchars($ip) ?>">
+
+<button
+class="btn btn-danger btn-sm">
+
+Удалить имя
+
+</button>
+
+</form>
+
+</div>
+
+</div>
 
 <?php endforeach; ?>
 
-</table>
+</div>
+
+<?php endif; ?>
 
 </div>
 
 </body>
+
 </html>
