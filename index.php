@@ -1,4 +1,5 @@
 <?php
+var_dump($rows); exit;
 // 1. НАСТРОЙКИ
 // Укажи здесь ссылку на CSV (опубликованный в Google Sheets)
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time(); 
