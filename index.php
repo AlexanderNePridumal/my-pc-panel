@@ -30,8 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-$data = @file_get_contents($csvUrl);
-
+$ch = curl_init($csvUrl);  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);  curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);  $data = curl_exec($ch);  curl_close($ch);
+echo "<pre>";
+echo htmlspecialchars($data);
+echo "</pre>";
+exit;
 if (!$data) {
     die("CSV пуст");
 }
