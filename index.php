@@ -3,9 +3,11 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
-$scriptUrl ="https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
-
+/*
+|--------------------------------------------------------------------------
+| ССЫЛКИ
+|--------------------------------------------------------------------------
+*/
 
 $csvUrl =
 "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
@@ -61,12 +63,6 @@ $data = curl_exec($ch);
 
 curl_close($ch);
 
-/*
-|--------------------------------------------------------------------------
-| ЕСЛИ CSV ПУСТОЙ
-|--------------------------------------------------------------------------
-*/
-
 if (!$data || trim($data) == "") {
     $rows = [];
 } else {
@@ -79,13 +75,15 @@ if (!$data || trim($data) == "") {
 
 /*
 |--------------------------------------------------------------------------
-| МАССИВЫ ПК
+| ПК
 |--------------------------------------------------------------------------
 */
 
 $newDevices = [];
 
 $knownDevices = [];
+
+$usedIps = [];
 
 /*
 |--------------------------------------------------------------------------
@@ -95,46 +93,32 @@ $knownDevices = [];
 
 foreach ($rows as $index => $row) {
 
-    // пропускаем пустые строки
-
-    if (empty($row))
-        continue;
-
-    // если меньше 3 колонок
-
     if (count($row) < 3)
         continue;
 
-    /*
-    Google CSV:
+    $ip =
+        isset($row[1]) ? trim($row[1]) : '';
 
-    0 = time
-    1 = ip
-    2 = status
-    3 = name
-    */
+    // пропуск заголовков
+
+    if ($ip == "ip")
+        continue;
+
+    // защита от дублей
+
+    if (isset($usedIps[$ip]))
+        continue;
+
+    $usedIps[$ip] = true;
 
     $time =
         isset($row[0]) ? trim($row[0]) : '';
-
-    $ip =
-        isset($row[1]) ? trim($row[1]) : '';
 
     $status =
         isset($row[2]) ? trim($row[2]) : 'offline';
 
     $name =
         isset($row[3]) ? trim($row[3]) : '';
-
-    // пропускаем заголовки
-
-    if ($ip == "ip")
-        continue;
-
-    // пропускаем пустой IP
-
-    if (empty($ip))
-        continue;
 
     $device = [
         'time'   => $time,
@@ -175,91 +159,245 @@ rel="stylesheet">
 
 <style>
 
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
 body{
+    background:#020617;
+    color:white;
+    font-family:Arial;
+}
+
+.container{
+    max-width:1200px;
+}
+
+.title{
+    font-size:32px;
+    font-weight:bold;
+    margin-bottom:30px;
+}
+
+.section-title{
+    font-size:24px;
+    margin-top:40px;
+    margin-bottom:20px;
+}
+
+.device-card{
+
     background:#0f172a;
-    color:white;
+
+    border:1px solid #1e293b;
+
+    border-radius:18px;
+
+    padding:20px;
+
+    transition:0.2s;
 }
 
-.card{
-    background:#1e293b;
-    border:none;
-    border-radius:12px;
+.device-card:hover{
+
+    transform:translateY(-3px);
+
+    border-color:#3b82f6;
 }
 
-.table{
-    color:white;
+.device-name{
+
+    font-size:22px;
+
+    font-weight:bold;
+
+    margin-bottom:15px;
 }
 
-input{
-    background:#0f172a !important;
+.device-info{
+
+    color:#cbd5e1;
+
+    margin-bottom:8px;
+}
+
+.online{
+
+    color:#22c55e;
+
+    font-weight:bold;
+}
+
+.offline{
+
+    color:#ef4444;
+
+    font-weight:bold;
+}
+
+.custom-input{
+
+    background:#111827 !important;
+
     color:white !important;
+
     border:1px solid #334155 !important;
+
+    border-radius:10px !important;
+
+    padding:12px !important;
+}
+
+.custom-input::placeholder{
+
+    color:#94a3b8 !important;
+}
+
+.custom-input:focus{
+
+    background:#111827 !important;
+
+    color:white !important;
+
+    border-color:#3b82f6 !important;
+
+    box-shadow:none !important;
+}
+
+.btn-save{
+
+    background:#2563eb;
+
+    border:none;
+
+    border-radius:10px;
+
+    padding:10px;
+
+    width:100%;
+
+    color:white;
+
+    font-weight:bold;
+}
+
+.btn-save:hover{
+
+    background:#1d4ed8;
+}
+
+.btn-delete{
+
+    background:#dc2626;
+
+    border:none;
+
+    border-radius:10px;
+
+    padding:10px;
+
+    width:100%;
+
+    color:white;
+
+    font-weight:bold;
+}
+
+.btn-delete:hover{
+
+    background:#b91c1c;
+}
+
+.empty-box{
+
+    background:#111827;
+
+    border-radius:14px;
+
+    padding:20px;
+
+    color:#94a3b8;
 }
 
 </style>
 
 </head>
 
-<body class="p-4">
+<body>
 
-<div class="container">
+<div class="container py-5">
 
-<h2 class="mb-4">
+<div class="title">
+🖥 PC Control Panel
+</div>
+
+<!-- НОВЫЕ ПК -->
+
+<div class="section-title">
 🆕 Новые ПК
-</h2>
+</div>
 
 <?php if(empty($newDevices)): ?>
 
-<div class="alert alert-secondary">
-Нет новых ПК
+<div class="empty-box">
+Нет новых устройств
 </div>
 
 <?php else: ?>
 
-<div class="row g-3">
+<div class="row g-4">
 
 <?php foreach($newDevices as $ip => $d): ?>
 
 <div class="col-md-4">
 
-<div class="card p-3">
+<div class="device-card">
 
-<h5>
+<div class="device-name">
 ⚠️ Новый ПК
-</h5>
+</div>
 
-<p>
+<div class="device-info">
 <b>IP:</b>
 <?= htmlspecialchars($ip) ?>
-</p>
+</div>
 
-<p>
+<div class="device-info">
 <b>Статус:</b>
+
+<span class="<?= $d['status'] == 'online'
+? 'online'
+: 'offline' ?>">
+
 <?= htmlspecialchars($d['status']) ?>
-</p>
 
-<form method="POST">
+</span>
 
-<input type="hidden"
+</div>
+
+<form method="POST" class="mt-4">
+
+<input
+type="hidden"
 name="update_name"
 value="1">
 
-<input type="hidden"
+<input
+type="hidden"
 name="ip"
 value="<?= htmlspecialchars($ip) ?>">
 
 <input
 type="text"
 name="name"
-class="form-control mb-2"
-placeholder="Имя ПК"
+class="form-control custom-input mb-3"
+placeholder="Введите имя ПК"
 required>
 
-<button
-class="btn btn-success w-100">
-
+<button class="btn-save">
 Сохранить
-
 </button>
 
 </form>
@@ -274,69 +412,72 @@ class="btn btn-success w-100">
 
 <?php endif; ?>
 
-<h2 class="mt-5 mb-4">
+<!-- ИЗВЕСТНЫЕ ПК -->
+
+<div class="section-title">
 💻 Известные ПК
-</h2>
+</div>
 
 <?php if(empty($knownDevices)): ?>
 
-<div class="alert alert-secondary">
-Нет известных ПК
+<div class="empty-box">
+Нет известных устройств
 </div>
 
 <?php else: ?>
 
-<div class="row g-3">
+<div class="row g-4">
 
 <?php foreach($knownDevices as $ip => $d): ?>
 
 <div class="col-md-4">
 
-<div class="card p-3">
+<div class="device-card">
 
-<h4>
+<div class="device-name">
 <?= htmlspecialchars($d['name']) ?>
-</h4>
+</div>
 
-<p>
+<div class="device-info">
 <b>IP:</b>
 <?= htmlspecialchars($ip) ?>
-</p>
+</div>
 
-<p>
+<div class="device-info">
 
 <b>Статус:</b>
 
-<?php
+<span class="<?= $d['status'] == 'online'
+? 'online'
+: 'offline' ?>">
 
-echo $d['status'] == 'online'
+<?= $d['status'] == 'online'
 ? '🟢 Online'
-: '🔴 Offline';
+: '🔴 Offline' ?>
 
-?>
+</span>
 
-</p>
+</div>
 
-<p>
+<div class="device-info">
 <b>Последний сигнал:</b><br>
 <?= htmlspecialchars($d['time']) ?>
-</p>
+</div>
 
-<form method="POST">
+<form method="POST" class="mt-4">
 
-<input type="hidden"
+<input
+type="hidden"
 name="delete_name"
 value="1">
 
-<input type="hidden"
+<input
+type="hidden"
 name="ip"
 value="<?= htmlspecialchars($ip) ?>">
 
-<button
-class="btn btn-danger btn-sm">
-
+<button class="btn-delete">
 Удалить имя
-
 </button>
 
 </form>
