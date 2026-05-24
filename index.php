@@ -2,7 +2,7 @@
 ini_set('display_errors',1);
 error_reporting(E_ALL);
 
-$api="https://script.google.com/macros/s/AKfycbz0WiJxJzgOqGKnoxrbV44oetcbcBvcBTjv5d1q1D8DYL9eqUZv95Rcf3IRWRSIkImiiw/exec";
+$api="https://script.google.com/macros/s/AKfycbxii7c1LApf-QkOCjg9aN7hgygQBa9Pjt0aAwO-y_r--wzunh0jMS6VoS1rA5gWiW2r/exec";
 
 function getData($url){
 
