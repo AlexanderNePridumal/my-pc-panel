@@ -1,8 +1,8 @@
 <?php
-$csvUrl = "ССЫЛКА_НА_CSV_ИЗ_GOOGLE" . "&t=" . time(); // Замени на свою
-$scriptUrl = "ССЫЛКА_НА_ВАШ_SCRIPT_EXEC"; // Замени на ссылку из Apps Script
+// Твои данные уже вставлены
+$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time();
+$scriptUrl = "https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec"; // <--- ВСТАВЬ СЮДА СВОЮ ССЫЛКУ ИЗ GOOGLE APPS SCRIPT
 
-// Обработка смены имени
 if (isset($_GET['action']) && $_GET['action'] == 'set_name') {
     $postData = http_build_query(['update_name' => '1', 'ip' => $_POST['ip'], 'name' => $_POST['name']]);
     $ch = curl_init($scriptUrl);
@@ -13,7 +13,6 @@ if (isset($_GET['action']) && $_GET['action'] == 'set_name') {
     header("Location: /"); exit;
 }
 
-// Загрузка данных
 $ch = curl_init($csvUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -34,27 +33,30 @@ foreach ($rows as $row) {
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Панель</title>
+    <title>Панель Управления</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>body { background: #0f172a; color: white; }</style>
 </head>
 <body class="p-4">
-    <table class="table table-dark">
-        <tr><th>Имя</th><th>IP</th><th>Последний сигнал</th><th>Действие</th></tr>
-        <?php foreach($devices as $d): ?>
-        <tr>
-            <td><?= htmlspecialchars($d['name']) ?></td>
-            <td><?= htmlspecialchars($d['ip']) ?></td>
-            <td><?= htmlspecialchars($d['time']) ?></td>
-            <td>
-                <form method="POST" action="?action=set_name" class="d-flex">
-                    <input type="hidden" name="ip" value="<?= $d['ip'] ?>">
-                    <input type="text" name="name" class="form-control form-control-sm" placeholder="Имя">
-                    <button class="btn btn-sm btn-primary">OK</button>
-                </form>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-    </table>
+    <div class="container">
+        <h2 class="mb-4">Список устройств</h2>
+        <table class="table table-dark">
+            <tr><th>Имя</th><th>IP</th><th>Последний сигнал</th><th>Действие</th></tr>
+            <?php foreach($devices as $d): ?>
+            <tr>
+                <td><?= htmlspecialchars($d['name']) ?></td>
+                <td><?= htmlspecialchars($d['ip']) ?></td>
+                <td><?= htmlspecialchars($d['time']) ?></td>
+                <td>
+                    <form method="POST" action="?action=set_name" class="d-flex">
+                        <input type="hidden" name="ip" value="<?= $d['ip'] ?>">
+                        <input type="text" name="name" class="form-control form-control-sm" placeholder="Имя">
+                        <button class="btn btn-sm btn-primary">OK</button>
+                    </form>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
 </body>
 </html>
