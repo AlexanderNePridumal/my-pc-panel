@@ -22,7 +22,7 @@ $json=curl_exec($ch);
 curl_close($ch);
 
 $devices=json_decode($json,true);
-if(!is_array($devices)) $devices=[];
+if(!is_array($devices))$devices=[];
 ?>
 
 <!DOCTYPE html>
@@ -40,15 +40,20 @@ input{background:#0b1220!important;color:white!important;border:1px solid #33415
 </head>
 <body>
 <div class="container py-4">
-<h2 class="mb-4">🖥 PC Panel</h2>
+<h2>🖥 PC Panel</h2>
+
 <div class="row g-3">
+
 <?php foreach($devices as $d): ?>
+
 <div class="col-md-4">
 <div class="card">
+
 <h5><?= $d['name'] ? htmlspecialchars($d['name']) : "⚠️ Новый ПК" ?></h5>
+
+<p>Time: <?=htmlspecialchars($d['time'])?></p>
 <p>IP: <?=htmlspecialchars($d['ip'])?></p>
 <p>Status: <?=htmlspecialchars($d['status'])?></p>
-<p>Time: <?=htmlspecialchars($d['time'])?></p>
 
 <?php if(empty($d['name'])): ?>
 <form method="POST">
@@ -60,7 +65,9 @@ input{background:#0b1220!important;color:white!important;border:1px solid #33415
 
 </div>
 </div>
+
 <?php endforeach; ?>
+
 </div>
 </div>
 </body>
