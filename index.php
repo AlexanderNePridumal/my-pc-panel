@@ -4,15 +4,63 @@ error_reporting(E_ALL);
 $csvUrl="https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=".time();
 $scriptUrl="https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
 if($_SERVER['REQUEST_METHOD']==='POST'){
+
+$params=[];
+
 if(isset($_POST['update_name'])){
-$url=$scriptUrl."?update_name=1&ip=".urlencode($_POST['ip'])."&name=".urlencode($_POST['name']);
-@file_get_contents($url);
+$params=[
+'update_name'=>'1',
+'ip'=>$_POST['ip'],
+'name'=>$_POST['name']
+];
 }
+
 if(isset($_POST['delete_name'])){
-$url=$scriptUrl."?delete_name=1&ip=".urlencode($_POST['ip']);
-@file_get_contents($url);
+$params=[
+'delete_name'=>'1',
+'ip'=>$_POST['ip']
+];
 }
-header("Location: /");
+
+$ch=curl_init();
+
+curl_setopt($ch,CURLOPT_URL,$scriptUrl);
+
+curl_setopt($ch,CURLOPT_POST,true);
+
+curl_setopt($ch,CURLOPT_POSTFIELDS,http_build_query($params));
+
+curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+
+curl_setopt($ch,CURLOPT_FOLLOWLOCATION,true);
+
+curl_setopt($ch,CURLOPT_SSL_VERIFYPEER,false);
+
+curl_setopt($ch,CURLOPT_TIMEOUT,20);
+
+curl_setopt($ch,CURLOPT_USERAGENT,'Mozilla/5.0');
+
+$response=curl_exec($ch);
+
+$error=curl_error($ch);
+
+$http=curl_getinfo($ch,CURLINFO_HTTP_CODE);
+
+curl_close($ch);
+
+echo "<pre>";
+
+echo "HTTP CODE:\n";
+var_dump($http);
+
+echo "\nRESPONSE:\n";
+var_dump($response);
+
+echo "\nERROR:\n";
+var_dump($error);
+
+echo "</pre>";
+
 exit;
 }
 $ch=curl_init($csvUrl);
