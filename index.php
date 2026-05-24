@@ -1,124 +1,137 @@
 <?php
-ini_set('display_errors',1);
-error_reporting(E_ALL);
+$api="ВАШ_APPS_SCRIPT_URL";
 
-$csvUrl="https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv";
-
-$data=@file_get_contents($csvUrl);
-$rows=array_map('str_getcsv',explode("\n",trim($data)));
-
-$devices=[];
-
-foreach($rows as $r){
-if(!isset($r[1])) continue;
-
-$ip=trim($r[1]);
-if($ip=="") continue;
-
-$devices[$ip]=[
-"time"=>$r[0]??"",
-"ip"=>$ip,
-"status"=>$r[2]??"",
-"name"=>$r[3]??""
-];
+function getData($url){
+$ch=curl_init($url);
+curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+curl_setopt($ch,CURLOPT_FOLLOWLOCATION,true);
+curl_setopt($ch,CURLOPT_TIMEOUT,10);
+$res=curl_exec($ch);
+curl_close($ch);
+return json_decode($res,true);
 }
+
+if($_SERVER["REQUEST_METHOD"]==="POST"){
+$ip=$_POST["ip"]??"";
+$name=$_POST["name"]??"";
+
+$data=http_build_query([
+"action"=>"set_name",
+"ip"=>$ip,
+"name"=>$name
+]);
+
+$ch=curl_init($api);
+curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
+curl_setopt($ch,CURLOPT_POST,true);
+curl_setopt($ch,CURLOPT_POSTFIELDS,$data);
+curl_exec($ch);
+curl_close($ch);
+
+header("Location: /");
+exit;
+}
+
+$devices=getData($api);
+if(!is_array($devices))$devices=[];
 ?>
 
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <title>PC Panel</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
 <style>
 body{
+margin:0;
+font-family:system-ui;
 background:#0b1220;
-color:white;
-font-family:Arial;
+color:#e5e7eb;
 }
 
-.title{
-font-size:28px;
-font-weight:bold;
-margin-bottom:20px;
+h2{
+padding:20px;
+margin:0;
+border-bottom:1px solid #1f2937;
+}
+
+.container{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
+gap:15px;
+padding:20px;
 }
 
 .card{
-background:#111827;
+background:linear-gradient(145deg,#111827,#0f172a);
 border:1px solid #1f2937;
-border-radius:15px;
 padding:15px;
-box-shadow:0 0 10px rgba(0,0,0,0.3);
+border-radius:14px;
+box-shadow:0 10px 30px rgba(0,0,0,0.3);
 transition:0.2s;
 }
 
 .card:hover{
-transform:scale(1.02);
+transform:translateY(-3px);
+border-color:#374151;
 }
 
-.status{
-padding:4px 10px;
-border-radius:10px;
-font-size:12px;
-display:inline-block;
-}
-
-.online{background:#16a34a;}
-.offline{background:#dc2626;}
+.ip{color:#93c5fd;font-size:12px}
+.status{margin-top:5px;color:#34d399}
+.time{font-size:12px;color:#9ca3af;margin-top:5px}
 
 input{
-background:#0b1220!important;
-color:white!important;
-border:1px solid #334155!important;
+width:100%;
+padding:8px;
+margin-top:10px;
+border-radius:8px;
+border:1px solid #374151;
+background:#0b1220;
+color:white;
+outline:none;
 }
 
-.btn{
+button{
 width:100%;
+margin-top:10px;
+padding:8px;
+border:none;
+border-radius:8px;
+background:#3b82f6;
+color:white;
+cursor:pointer;
+}
+
+button:hover{
+background:#2563eb;
 }
 </style>
+
 </head>
 <body>
 
-<div class="container py-4">
+<h2>PC Panel</h2>
 
-<div class="title">🖥 PC Panel</div>
-
-<div class="row g-3">
+<div class="container">
 
 <?php foreach($devices as $d): ?>
-
-<div class="col-md-4">
-
 <div class="card">
 
-<h5>
-<?= $d['name'] ? htmlspecialchars($d['name']) : "⚠️ Новый ПК" ?>
-</h5>
+<div><b><?=htmlspecialchars($d["name"] ?: "No name")?></b></div>
+<div class="ip"><?=htmlspecialchars($d["ip"])?></div>
 
-<div class="mb-2">IP: <?=htmlspecialchars($d['ip'])?></div>
-<div class="mb-2">Time: <?=htmlspecialchars($d['time'])?></div>
+<div class="status"><?=htmlspecialchars($d["status"])?></div>
+<div class="time"><?=htmlspecialchars($d["time"])?></div>
 
-<span class="status <?=($d['status']=='online')?'online':'offline'?>">
-<?=htmlspecialchars($d['status'])?>
-</span>
-
-<?php if(empty($d['name'])): ?>
-
-<form method="POST" class="mt-3">
-<input type="hidden" name="ip" value="<?=htmlspecialchars($d['ip'])?>">
-<input class="form-control mb-2" name="name" placeholder="Введите имя ПК" required>
-<button class="btn btn-primary">Сохранить</button>
+<form method="POST">
+<input name="ip" value="<?=htmlspecialchars($d["ip"])?>" type="hidden">
+<input name="name" placeholder="Имя ПК">
+<button>Сохранить</button>
 </form>
 
-<?php endif; ?>
-
 </div>
-
-</div>
-
 <?php endforeach; ?>
-
-</div>
 
 </div>
 
