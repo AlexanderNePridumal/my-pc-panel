@@ -1,5 +1,4 @@
 <?php
-// Настройки папок
 $imgDir = 'screenshots/';
 if (!is_dir($imgDir)) mkdir($imgDir);
 
@@ -9,10 +8,17 @@ if (isset($_FILES['screen'])) {
     echo "ok"; exit;
 }
 
-// 2. Прием текстового лога от бота
-if (isset($_POST['log'])) {
+// 2. Прием и сохранение истории (последние 10 записей)
+if (isset($_POST['apps'])) {
     $pc_id = $_POST['pc_id'];
-    file_put_contents("log_$pc_id.txt", $_POST['log']);
+    $new_data = "--- " . date("H:i:s") . " ---\n" . $_POST['apps'] . "\n";
+    $file = "history_$pc_id.txt";
+    
+    $history = file_exists($file) ? explode("---", file_get_contents($file)) : [];
+    array_unshift($history, $new_data);
+    $history = array_slice($history, 0, 10);
+    
+    file_put_contents($file, implode("---", $history));
     echo "ok"; exit;
 }
 
@@ -48,36 +54,41 @@ if (isset($_POST['set_cmd'])) {
     <title>Control Panel</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: sans-serif; padding: 20px; }
-        .pc-card { background: #1e293b; padding: 15px; margin: 10px; border-radius: 8px; border: 1px solid #334155; display: inline-block; vertical-align: top; width: 300px; }
+        .pc-card { background: #1e293b; padding: 15px; margin: 10px; border-radius: 8px; border: 1px solid #334155; width: 320px; display: inline-block; vertical-align: top; }
         button { background: #6366f1; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; margin: 2px; }
-        pre { background: #000; padding: 10px; border-radius: 4px; color: #38bdf8; font-size: 12px; overflow-x: auto; }
+        pre { background: #000; padding: 10px; border-radius: 4px; color: #38bdf8; font-size: 12px; height: 150px; overflow-y: auto; }
+        .img-thumb { display: inline-block; margin: 5px; text-align: center; }
     </style>
 </head>
 <body>
     <h1>Панель управления ПК</h1>
     <?php 
-    $pcs = ['PC-01', 'PC-02']; // Добавляй сюда ID своих ПК
+    $pcs = ['PC-01', 'PC-02']; // Твои ID
     foreach($pcs as $pc) {
-        $log = file_exists("log_$pc.txt") ? file_get_contents("log_$pc.txt") : "Лог пуст";
+        $history = file_exists("history_$pc.txt") ? file_get_contents("history_$pc.txt") : "Нет истории";
         echo "<div class='pc-card'>
                 <h3>$pc</h3>
                 <form method='POST'>
                     <input type='hidden' name='pc_id' value='$pc'>
                     <button name='set_cmd' value='screen'>📸 Скрин</button>
                     <button name='set_cmd' value='app'>📋 Окна</button>
-                    <input type='text' name='proc_name' placeholder='Процесс' style='width:60px'>
+                    <input type='text' name='proc_name' placeholder='Process' style='width:60px'>
                     <button name='set_cmd' value='delete'>❌ Kill</button>
                 </form>
-                <b>Лог:</b><pre>$log</pre>
+                <b>История запросов:</b>
+                <pre>$history</pre>
               </div>";
     }
     ?>
     <h2>Галерея скриншотов</h2>
     <?php
     $files = glob("$imgDir*.jpg");
-    rsort($files); // Свежие в начале
+    rsort($files);
     foreach ($files as $file) {
-        echo "<img src='$file' style='width:200px; margin:5px; border:2px solid #6366f1;'>";
+        echo "<div class='img-thumb'>
+                <img src='$file' style='width:150px; display:block; border:2px solid #6366f1;'>
+                <a href='$file' download style='color:#fff;'>Скачать</a>
+              </div>";
     }
     ?>
 </body>
