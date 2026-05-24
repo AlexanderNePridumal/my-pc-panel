@@ -20,33 +20,20 @@ $scriptUrl =
 | СОХРАНЕНИЕ ИМЕНИ
 |--------------------------------------------------------------------------
 */
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    $ch = curl_init($scriptUrl);
+    $url =
+        $scriptUrl .
+        "?update_name=1" .
+        "&ip=" . urlencode($_POST['ip']) .
+        "&name=" . urlencode($_POST['name']);
 
-    curl_setopt($ch, CURLOPT_POST, true);
-
-    curl_setopt($ch, CURLOPT_POSTFIELDS,
-        http_build_query($_POST));
-
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-
-    curl_exec($ch);
-
-    curl_close($ch);
-
-    sleep(1);
+    file_get_contents($url);
 
     header("Location: /");
 
     exit;
 }
-
 /*
 |--------------------------------------------------------------------------
 | ЗАГРУЗКА CSV
