@@ -1,8 +1,5 @@
 <?php
-$data = @file_get_contents($csvUrl);
-var_dump($data); // Выведет то, что получил PHP
-exit;            // Остановит сайт, чтобы ты увидел только результат загрузки
-// Добавляем кэш-брейкер
+
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time();
 
 // Включаем отображение ошибок, чтобы видеть, почему файл не качается
