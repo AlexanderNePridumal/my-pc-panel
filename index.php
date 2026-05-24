@@ -1,5 +1,5 @@
 <?php
-$api="ВАШ_APPS_SCRIPT_URL";
+$api="https://script.google.com/macros/s/AKfycbxii7c1LApf-QkOCjg9aN7hgygQBa9Pjt0aAwO-y_r--wzunh0jMS6VoS1rA5gWiW2r/exec";
 
 function getData($url){
 $ch=curl_init($url);
@@ -74,12 +74,11 @@ transition:0.2s;
 
 .card:hover{
 transform:translateY(-3px);
-border-color:#374151;
 }
 
 .ip{color:#93c5fd;font-size:12px}
-.status{margin-top:5px;color:#34d399}
-.time{font-size:12px;color:#9ca3af;margin-top:5px}
+.status{color:#34d399;margin-top:5px}
+.time{color:#9ca3af;font-size:12px;margin-top:5px}
 
 input{
 width:100%;
@@ -89,7 +88,6 @@ border-radius:8px;
 border:1px solid #374151;
 background:#0b1220;
 color:white;
-outline:none;
 }
 
 button{
@@ -125,7 +123,7 @@ background:#2563eb;
 <div class="time"><?=htmlspecialchars($d["time"])?></div>
 
 <form method="POST">
-<input name="ip" value="<?=htmlspecialchars($d["ip"])?>" type="hidden">
+<input type="hidden" name="ip" value="<?=htmlspecialchars($d["ip"])?>">
 <input name="name" placeholder="Имя ПК">
 <button>Сохранить</button>
 </form>
