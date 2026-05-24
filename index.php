@@ -1,19 +1,33 @@
 <?php
-$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&cache=" . uniqid();
+// Настройки
+$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
 $scriptUrl = "https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
+$namesFile = 'names.json';
 
-// Обработка смены имени
+// Загрузка локальных имен
+$names = file_exists($namesFile) ? json_decode(file_get_contents($namesFile), true) : [];
+
+// Обработка кнопки "Присвоить"
 if (isset($_GET['action']) && $_GET['action'] == 'set_name') {
-    $postData = http_build_query(['update_name' => '1', 'ip' => $_POST['ip'], 'name' => $_POST['name']]);
+    $ip = $_POST['ip'];
+    $name = $_POST['name'];
+    
+    // Мгновенное сохранение локально
+    $names[$ip] = $name;
+    file_put_contents($namesFile, json_encode($names));
+    
+    // Фоновая отправка в Google (не блокирует сайт)
+    $postData = http_build_query(['update_name' => '1', 'ip' => $ip, 'name' => $name]);
     $ch = curl_init($scriptUrl);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_exec($ch);
     curl_close($ch);
+    
     header("Location: /"); exit;
 }
 
-// Загрузка данных
+// Загрузка данных из таблицы
 $ch = curl_init($csvUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -21,13 +35,15 @@ $data = curl_exec($ch);
 curl_close($ch);
 
 $rows = array_map('str_getcsv', explode("\n", trim($data)));
-$named = [];   // ПК с именами
-$unnamed = []; // ПК без имен
+$named = [];
+$unnamed = [];
 
 foreach ($rows as $row) {
     if(count($row) >= 3) {
         $ip = $row[1];
-        $name = $row[3] ?? 'Неизвестный';
+        // Берем имя из нашего файла, если оно там есть, иначе из таблицы
+        $name = isset($names[$ip]) ? $names[$ip] : ($row[3] ?? 'Неизвестный');
+        
         $dataItem = ['ip' => $ip, 'time' => $row[0], 'status' => $row[2], 'name' => $name];
         
         if ($name === 'Неизвестный' || $name === '0' || empty($name)) {
@@ -60,8 +76,8 @@ foreach ($rows as $row) {
                     <td>
                         <form method="POST" action="?action=set_name" class="d-flex">
                             <input type="hidden" name="ip" value="<?= $d['ip'] ?>">
-                            <input type="text" name="name" class="form-control form-control-sm me-2" placeholder="Введите имя...">
-                            <button class="btn btn-sm btn-primary">Присвоить</button>
+                            <input type="text" name="name" class="form-control form-control-sm me-2" placeholder="Имя">
+                            <button class="btn btn-sm btn-primary">OK</button>
                         </form>
                     </td>
                 </tr>
