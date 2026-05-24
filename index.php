@@ -1,4 +1,3 @@
-
 <?php
 
 ini_set('display_errors', 1);
@@ -6,6 +5,7 @@ error_reporting(E_ALL);
 
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
 $scriptUrl ="https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
+
 
 $csvUrl =
 "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv&t=" . time();
@@ -15,7 +15,7 @@ $scriptUrl =
 
 /*
 |--------------------------------------------------------------------------
-| СОХРАНЕНИЕ / УДАЛЕНИЕ ИМЕНИ
+| СОХРАНЕНИЕ ИМЕНИ
 |--------------------------------------------------------------------------
 */
 
@@ -34,9 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 
-    $response = curl_exec($ch);
+    curl_exec($ch);
 
     curl_close($ch);
+
+    sleep(1);
 
     header("Location: /");
 
@@ -59,45 +61,90 @@ $data = curl_exec($ch);
 
 curl_close($ch);
 
-if (!$data) {
-    die("Ошибка загрузки CSV");
+/*
+|--------------------------------------------------------------------------
+| ЕСЛИ CSV ПУСТОЙ
+|--------------------------------------------------------------------------
+*/
+
+if (!$data || trim($data) == "") {
+    $rows = [];
+} else {
+
+    $rows = array_map(
+        'str_getcsv',
+        preg_split("/\r\n|\n|\r/", trim($data))
+    );
 }
 
 /*
 |--------------------------------------------------------------------------
-| ПАРСИНГ CSV
+| МАССИВЫ ПК
 |--------------------------------------------------------------------------
 */
-
-$rows = array_map(
-    'str_getcsv',
-    preg_split("/\r\n|\n|\r/", trim($data))
-);
 
 $newDevices = [];
 
 $knownDevices = [];
 
+/*
+|--------------------------------------------------------------------------
+| ЧТЕНИЕ CSV
+|--------------------------------------------------------------------------
+*/
+
 foreach ($rows as $index => $row) {
 
+    // пропускаем пустые строки
+
+    if (empty($row))
+        continue;
+
+    // если меньше 3 колонок
+
+    if (count($row) < 3)
+        continue;
+
+    /*
+    Google CSV:
+
+    0 = time
+    1 = ip
+    2 = status
+    3 = name
+    */
+
+    $time =
+        isset($row[0]) ? trim($row[0]) : '';
+
+    $ip =
+        isset($row[1]) ? trim($row[1]) : '';
+
+    $status =
+        isset($row[2]) ? trim($row[2]) : 'offline';
+
+    $name =
+        isset($row[3]) ? trim($row[3]) : '';
+
     // пропускаем заголовки
-    if ($index == 0)
+
+    if ($ip == "ip")
         continue;
 
-    if (count($row) < 4)
-        continue;
+    // пропускаем пустой IP
 
-    $ip = trim($row[1]);
+    if (empty($ip))
+        continue;
 
     $device = [
-        'time'   => trim($row[0]),
-        'status' => trim($row[2]),
-        'name'   => trim($row[3])
+        'time'   => $time,
+        'status' => $status,
+        'name'   => $name
     ];
 
-    // новые ПК без имени
+    // новые ПК
 
-    if (empty($device['name'])) {
+    if (empty($name)) {
 
         $newDevices[$ip] = $device;
 
@@ -133,24 +180,20 @@ body{
     color:white;
 }
 
-.table{
-    color:white;
-}
-
 .card{
     background:#1e293b;
     border:none;
     border-radius:12px;
 }
 
+.table{
+    color:white;
+}
+
 input{
     background:#0f172a !important;
     color:white !important;
     border:1px solid #334155 !important;
-}
-
-input::placeholder{
-    color:#94a3b8 !important;
 }
 
 </style>
@@ -162,13 +205,13 @@ input::placeholder{
 <div class="container">
 
 <h2 class="mb-4">
-🖥 Новые ПК
+🆕 Новые ПК
 </h2>
 
 <?php if(empty($newDevices)): ?>
 
-<div class="alert alert-success">
-Новых ПК нет
+<div class="alert alert-secondary">
+Нет новых ПК
 </div>
 
 <?php else: ?>
@@ -181,7 +224,7 @@ input::placeholder{
 
 <div class="card p-3">
 
-<h5 class="mb-3">
+<h5>
 ⚠️ Новый ПК
 </h5>
 
@@ -208,8 +251,8 @@ value="<?= htmlspecialchars($ip) ?>">
 <input
 type="text"
 name="name"
-class="form-control mb-3"
-placeholder="Введите имя ПК"
+class="form-control mb-2"
+placeholder="Имя ПК"
 required>
 
 <button
@@ -232,12 +275,12 @@ class="btn btn-success w-100">
 <?php endif; ?>
 
 <h2 class="mt-5 mb-4">
-✅ Известные ПК
+💻 Известные ПК
 </h2>
 
 <?php if(empty($knownDevices)): ?>
 
-<div class="alert alert-warning">
+<div class="alert alert-secondary">
 Нет известных ПК
 </div>
 
@@ -255,19 +298,21 @@ class="btn btn-success w-100">
 <?= htmlspecialchars($d['name']) ?>
 </h4>
 
-<p class="mb-1">
+<p>
 <b>IP:</b>
 <?= htmlspecialchars($ip) ?>
 </p>
 
-<p class="mb-1">
+<p>
 
 <b>Статус:</b>
 
 <?php
+
 echo $d['status'] == 'online'
-    ? '🟢 Online'
-    : '🔴 Offline';
+? '🟢 Online'
+: '🔴 Offline';
+
 ?>
 
 </p>
