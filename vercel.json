@@ -1,5 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/api/cmd", "destination": "/api/cmd.php" }
-  ]
-}
