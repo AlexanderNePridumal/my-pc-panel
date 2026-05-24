@@ -1,22 +1,33 @@
 <?php
-var_dump($rows); exit;
-// 1. НАСТРОЙКИ
-// Укажи здесь ссылку на CSV (опубликованный в Google Sheets)
-$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time(); 
+// Добавляем кэш-брейкер
+$csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time();
 
-// 2. ОБРАБОТКА КОМАНД ДЛЯ БОТА (API)
-if (isset($_GET['get_cmd'])) {
-    $pc_id = $_GET['pc_id'];
-    $cmdFile = "cmd_" . $pc_id . ".txt";
-    
-    if (file_exists($cmdFile)) {
-        echo file_get_contents($cmdFile);
-        unlink($cmdFile); // Удаляем команду после того, как бот её забрал
-    } else {
-        echo "none";
-    }
-    exit; // Важно: стопаем выполнение, чтобы не отдавать HTML
+// Включаем отображение ошибок, чтобы видеть, почему файл не качается
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+$data = @file_get_contents($csvUrl);
+
+if ($data === false) {
+    die("Ошибка: Не удалось скачать данные из Google Таблицы. Проверь ссылку и наличие интернета на сервере.");
 }
+
+// Разбиваем данные на строки
+$raw_rows = preg_split("/\r\n|\n|\r/", $data);
+$rows = [];
+
+foreach ($raw_rows as $row) {
+    $parsed = str_getcsv($row);
+    if (!empty($parsed[0])) { // Пропускаем пустые строки
+        $rows[] = $parsed;
+    }
+}
+
+// Теперь безопасно удаляем заголовок
+if (count($rows) > 0) array_shift($rows); 
+
+$devices = []; $new_pcs = [];
+// ... далее твой код обработки $rows ...
 
 // 3. ПРИЕМ ОТВЕТОВ ОТ БОТА (Логи/Скриншоты)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
