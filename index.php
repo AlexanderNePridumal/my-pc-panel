@@ -1,7 +1,6 @@
 <?php
-// Твои данные уже вставлены
 $csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTdx2B6KMZldMKf_mGRigmL0AqP0DtaNmaHeJhJQI31AJgd1hIgRMFk_Mv5DlDKm0AzI_mJF0Lfg7Ev/pub?output=csv" . "&t=" . time();
-$scriptUrl = "https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec"; // <--- ВСТАВЬ СЮДА СВОЮ ССЫЛКУ ИЗ GOOGLE APPS SCRIPT
+$scriptUrl = "https://script.google.com/macros/s/AKfycbxRtkyOsY-WFJ1mki8aa9Dk7H6tu6Oe2Rk9-4XJo7nwNVXLQvLuyopzdWPQPBT_g_LwHA/exec";
 
 if (isset($_GET['action']) && $_GET['action'] == 'set_name') {
     $postData = http_build_query(['update_name' => '1', 'ip' => $_POST['ip'], 'name' => $_POST['name']]);
@@ -19,16 +18,14 @@ curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 $data = curl_exec($ch);
 curl_close($ch);
 
-$rows = explode("\n", trim($data));
+$rows = array_map('str_getcsv', explode("\n", trim($data)));
 $devices = [];
 foreach ($rows as $row) {
-    $cols = str_getcsv($row);
-    if(count($cols) >= 3) {
-        $devices[$cols[1]] = ['ip' => $cols[1], 'time' => $cols[0], 'status' => $cols[2], 'name' => $cols[3] ?? 'Нет имени'];
+    if(count($row) >= 3) {
+        $devices[$row[1]] = ['ip' => $row[1], 'time' => $row[0], 'status' => $row[2], 'name' => $row[3] ?? 'Нет имени'];
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -39,7 +36,7 @@ foreach ($rows as $row) {
 </head>
 <body class="p-4">
     <div class="container">
-        <h2 class="mb-4">Список устройств</h2>
+        <h2>Активные устройства</h2>
         <table class="table table-dark">
             <tr><th>Имя</th><th>IP</th><th>Последний сигнал</th><th>Действие</th></tr>
             <?php foreach($devices as $d): ?>
