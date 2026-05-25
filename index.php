@@ -3,7 +3,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$api = "https://script.google.com/macros/s/AKfycbxii7c1LApf-QkOCjg9aN7hgygQBa9Pjt0aAwO-y_r--wzunh0jMS6VoS1rA5gWiW2r/exec";
+$api = "https://script.google.com/macros/s/XXXX/exec";
 
 function getData($url)
 {
@@ -14,7 +14,8 @@ function getData($url)
 
     $res = curl_exec($ch);
 
-    if (curl_errno($ch)) {
+    if (curl_errno($ch))
+    {
         return ["error" => curl_error($ch)];
     }
 
@@ -22,71 +23,89 @@ function getData($url)
 
     $json = json_decode($res, true);
 
-    if (!is_array($json)) {
+    if (!is_array($json))
+    {
         return ["error" => "Invalid JSON", "raw" => $res];
     }
 
     return $json;
 }
 
+function send($api, $data)
+{
+    $ch = curl_init($api);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+    curl_exec($ch);
+    curl_close($ch);
+}
+
+function timeAgo($t)
+{
+    $t = strtotime($t);
+    $diff = time() - $t;
+
+    if ($diff < 60) return $diff . " sec ago";
+    if ($diff < 3600) return floor($diff/60) . " min ago";
+    if ($diff < 86400) return floor($diff/3600) . " h ago";
+    return floor($diff/86400) . " days ago";
+}
+
 $message = "";
 $messageType = "";
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
+if ($_SERVER["REQUEST_METHOD"] === "POST")
+{
     $action = $_POST["action"] ?? "";
-    $ip = trim($_POST["ip"] ?? "");
+    $device_id = trim($_POST["device_id"] ?? "");
 
-    function send($api, $data) {
-        $ch = curl_init($api);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_exec($ch);
-        curl_close($ch);
-    }
-
-    if ($action === "set_name") {
-
+    if ($action === "set_name")
+    {
         send($api, [
-            "action" => "set_name",
-            "ip" => $ip,
+            "device_id" => $device_id,
             "name" => $_POST["name"] ?? ""
         ]);
 
-        $message = "Имя обновлено";
+        $message = "Name updated";
         $messageType = "success";
     }
 
-    if ($action === "delete") {
-
-        send($api, [
-            "action" => "delete",
-            "ip" => $ip
-        ]);
-
-        $message = "Устройство удалено";
-        $messageType = "danger";
-    }
-
-    if ($action === "shutdown") {
-
+    if ($action === "shutdown")
+    {
         send($api, [
             "action" => "shutdown",
-            "ip" => $ip
+            "device_id" => $device_id
         ]);
 
-        $message = "Команда выключения отправлена";
+        $message = "Shutdown sent";
         $messageType = "warning";
+    }
+
+    if ($action === "stop_client")
+    {
+        send($api, [
+            "action" => "stop_client",
+            "device_id" => $device_id
+        ]);
+
+        $message = "Client stopped";
+        $messageType = "warning";
+    }
+
+    if ($action === "delete")
+    {
+        send($api, [
+            "action" => "delete",
+            "device_id" => $device_id
+        ]);
+
+        $message = "Device deleted";
+        $messageType = "danger";
     }
 }
 
 $devices = getData($api);
-
-function statusColor($status)
-{
-    return $status === "online" ? "green" : "gray";
-}
 
 ?>
 
@@ -95,7 +114,7 @@ function statusColor($status)
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PC Control Panel</title>
+<title>PC Dashboard</title>
 
 <style>
 
@@ -107,125 +126,42 @@ color:#e5e7eb;
 }
 
 .header{
-padding:18px 25px;
-display:flex;
-justify-content:space-between;
-align-items:center;
-border-bottom:1px solid #1f2937;
+padding:16px 20px;
 background:#0f172a;
+border-bottom:1px solid #1f2937;
 position:sticky;
 top:0;
-}
-
-.header h1{
-font-size:18px;
-margin:0;
-}
-
-.badge{
-font-size:12px;
-color:#9ca3af;
+display:flex;
+justify-content:space-between;
 }
 
 .container{
-padding:25px;
+padding:20px;
 display:grid;
 grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
-gap:18px;
+gap:16px;
 }
 
 .card{
-background:linear-gradient(145deg,#111827,#0b1220);
+background:#111827;
 border:1px solid #1f2937;
 border-radius:14px;
-padding:16px;
-transition:.2s;
-}
-
-.card:hover{
-transform:translateY(-3px);
-border-color:#334155;
-}
-
-.top{
-display:flex;
-justify-content:space-between;
-align-items:center;
-margin-bottom:12px;
+padding:15px;
 }
 
 .name{
-font-size:16px;
 font-weight:700;
+font-size:16px;
 }
-
-.status{
-font-size:12px;
-padding:4px 10px;
-border-radius:999px;
-}
-
-.green{background:#14532d;color:#4ade80;}
-.gray{background:#1f2937;color:#9ca3af;}
-
-.row{
-margin-top:10px;
-font-size:13px;
-color:#cbd5e1;
-}
-
-.label{
-color:#64748b;
-font-size:11px;
-}
-
-input{
-width:100%;
-padding:10px;
-margin-top:10px;
-border-radius:10px;
-border:1px solid #334155;
-background:#0b1220;
-color:white;
-outline:none;
-}
-
-button{
-width:100%;
-padding:9px;
-margin-top:8px;
-border:none;
-border-radius:10px;
-cursor:pointer;
-font-weight:600;
-transition:.2s;
-}
-
-.primary{background:#2563eb;color:white;}
-.primary:hover{background:#1d4ed8;}
-
-.danger{background:#dc2626;color:white;}
-.danger:hover{background:#b91c1c;}
-
-.warning{background:#f59e0b;color:black;}
-.warning:hover{background:#d97706;}
-
-.message{
-margin:15px 25px;
-padding:12px;
-border-radius:10px;
-font-weight:600;
-}
-
-.success{background:#14532d;}
-.dangerMsg{background:#450a0a;}
-.warningMsg{background:#3b2f0a;}
 
 .small{
 font-size:11px;
 color:#94a3b8;
-margin-top:6px;
-word-break:break-word;
+}
+
+.row{
+margin-top:8px;
+font-size:13px;
 }
 
 .apps{
@@ -235,28 +171,54 @@ max-height:60px;
 overflow:hidden;
 }
 
+input{
+width:100%;
+margin-top:8px;
+padding:8px;
+border-radius:8px;
+border:1px solid #334155;
+background:#0b1220;
+color:white;
+}
+
+button{
+width:100%;
+margin-top:6px;
+padding:8px;
+border-radius:8px;
+border:none;
+cursor:pointer;
+}
+
+.blue{background:#2563eb;color:white;}
+.red{background:#dc2626;color:white;}
+.orange{background:#f59e0b;color:black;}
+
+.status{
+font-size:11px;
+padding:3px 8px;
+border-radius:999px;
+display:inline-block;
+}
+
+.online{background:#14532d;color:#4ade80;}
+.offline{background:#1f2937;color:#9ca3af;}
+
 </style>
 </head>
 
 <body>
 
 <div class="header">
-    <h1>PC Control Dashboard</h1>
-    <div class="badge">Live monitoring</div>
+    <div>PC Dashboard</div>
 </div>
-
-<?php if($message): ?>
-<div class="message <?= $messageType === "success" ? "success" : ($messageType === "warning" ? "warningMsg" : "dangerMsg") ?>">
-    <?=htmlspecialchars($message)?>
-</div>
-<?php endif; ?>
 
 <div class="container">
 
 <?php if(isset($devices["error"])): ?>
 
-<div style="padding:20px;color:red;">
-    API ERROR: <?=htmlspecialchars($devices["error"])?>
+<div style="color:red;">
+    <?=htmlspecialchars($devices["error"])?>
 </div>
 
 <?php else: ?>
@@ -264,55 +226,64 @@ overflow:hidden;
 <?php foreach($devices as $d): ?>
 
 <?php
-$status = $d["status"] ?? "offline";
-$color = statusColor($status);
+$last = strtotime($d["time"] ?? "");
+$diff = time() - $last;
+
+$status = ($diff < 60) ? "online" : "offline";
+
 $apps = json_decode($d["apps"] ?? "[]", true);
 ?>
 
 <div class="card">
 
-<div class="top">
-    <div class="name"><?=htmlspecialchars($d["name"] ?? "Unknown PC")?></div>
-    <div class="status <?=$color?>"><?=$status?></div>
+<div class="name">
+<?=htmlspecialchars($d["name"] ?? "Unknown")?>
+</div>
+
+<div class="status <?=$status?>">
+<?=$status?>
 </div>
 
 <div class="row">
-    <div class="label">IP</div>
-    <?=htmlspecialchars($d["ip"] ?? "-")?>
+<b>IP:</b> <?=htmlspecialchars($d["ip"] ?? "")?>
 </div>
 
 <div class="row">
-    <div class="label">Last seen</div>
-    <?=htmlspecialchars($d["time"] ?? "-")?>
+<b>Last:</b> <?=timeAgo($d["time"] ?? "")?>
 </div>
 
-<div class="row">
-    <div class="label">Programs</div>
-    <div class="apps">
-        <?=is_array($apps) ? htmlspecialchars(implode(", ", array_slice($apps,0,10))) : "-"?>
-    </div>
+<div class="row apps">
+<?=is_array($apps) ? implode(", ", array_slice($apps,0,10)) : "-"?>
 </div>
 
+<!-- NAME -->
 <form method="POST">
-    <input type="hidden" name="action" value="set_name">
-    <input type="hidden" name="ip" value="<?=htmlspecialchars($d["ip"] ?? "")?>">
-    <input type="text" name="name" placeholder="Set name" required>
-    <button class="primary">Save</button>
+<input type="hidden" name="action" value="set_name">
+<input type="hidden" name="device_id" value="<?=htmlspecialchars($d["device_id"] ?? "")?>">
+<input name="name" placeholder="Name">
+<button class="blue">Save</button>
 </form>
 
+<!-- STOP -->
 <form method="POST">
-    <input type="hidden" name="action" value="shutdown">
-    <input type="hidden" name="ip" value="<?=htmlspecialchars($d["ip"] ?? "")?>">
-    <button class="warning" onclick="return confirm('Shutdown this PC?')">Shutdown</button>
+<input type="hidden" name="action" value="stop_client">
+<input type="hidden" name="device_id" value="<?=htmlspecialchars($d["device_id"] ?? "")?>">
+<button class="orange">Stop client</button>
 </form>
 
+<!-- SHUTDOWN -->
 <form method="POST">
-    <input type="hidden" name="action" value="delete">
-    <input type="hidden" name="ip" value="<?=htmlspecialchars($d["ip"] ?? "")?>">
-    <button class="danger" onclick="return confirm('Delete device?')">Delete</button>
+<input type="hidden" name="action" value="shutdown">
+<input type="hidden" name="device_id" value="<?=htmlspecialchars($d["device_id"] ?? "")?>">
+<button class="orange">Shutdown PC</button>
 </form>
 
-<div class="small">HWID/IP: <?=htmlspecialchars($d["ip"] ?? "")?></div>
+<!-- DELETE (FIXED) -->
+<form method="POST">
+<input type="hidden" name="action" value="delete">
+<input type="hidden" name="device_id" value="<?=htmlspecialchars($d["device_id"] ?? "")?>">
+<button class="red" onclick="return confirm('Delete device?')">Delete</button>
+</form>
 
 </div>
 
