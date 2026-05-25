@@ -4,7 +4,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // ВСТАВЬТЕ ВАШ URL СЮДА:
-$api = "https://script.google.com/macros/s/AKfycbxii7c1LApf-QkOCjg9aN7hgygQBa9Pjt0aAwO-y_r--wzunh0jMS6VoS1rA5gWiW2r/exec";
+$api = "https://script.google.com/macros/s/AKfycbyTKy2BvPGAOdT7KrUkgOGsotZLXu83JYI3jeGgIDsTr-r7x3BuOqKFToK3OjQSwbNi/exec";
 
 function getData($url)
 {
