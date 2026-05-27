@@ -129,16 +129,42 @@ if (isset($_GET['get_logs_ajax'])) {
 }
 
 // ОБРАБОТКА КОМАНД ИЗ ФОРМ
+// ЕДИНЫЙ НАДЕЖНЫЙ МЕТОД ОТПРАВКИ ВСЕХ КОМАНД (ВКЛЮЧАЯ СКРИНШОТ)
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $action = $_POST["action"] ?? ""; $device_id = trim($_POST["device_id"] ?? "");
+    $action = $_POST["action"] ?? ""; 
+    $device_id = trim($_POST["device_id"] ?? "");
+
     if (!empty($action) && !empty($device_id)) {
-        $ch = curl_init($api); 
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(["action" => $action, "device_id" => $device_id])); 
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); curl_setopt($ch, CURLOPT_TIMEOUT, 6);
-        curl_exec($ch); curl_close($ch);
+        // Формируем данные строго в том формате, который на 100% принимает ваш Google Script
+        $postData = [
+            "action" => $action, 
+            "device_id" => $device_id
+        ];
+        
+        $ch = curl_init(); 
+        curl_setopt($ch, CURLOPT_URL, $api); 
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
+        curl_setopt($ch, CURLOPT_POST, true);
+        
+        // ИСПРАВЛЕНИЕ: Передаем данные как строку запроса (строго urlencode), чтобы Google Apps Script не путался
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData)); 
+        
+        // Эмулируем заголовок формы, как при отправке кнопкой выключения
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/x-www-form-urlencoded',
+            'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        ]);
+        
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        
+        $response = curl_exec($ch); 
+        curl_close($ch);
     }
-    header("Location: " . $_SERVER['PHP_SELF']); exit;
+    
+    // Сразу же перенаправляем на чистую страницу, чтобы не было повторных отправк при обновлении
+    header("Location: " . $_SERVER['PHP_SELF']); 
+    exit;
 }
 
 $devices = getData($api);
