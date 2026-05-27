@@ -1,5 +1,5 @@
 <?php
-ob_start(); // Защита от ошибки "Headers already sent"
+ob_start(); 
 session_start();
 
 error_reporting(E_ALL);
@@ -8,10 +8,22 @@ ini_set('display_errors', 1);
 // !!! СЮДА ВСТАВЬТЕ ВАШ URL ИЗ GOOGLE APPS SCRIPT !!!
 $api = "https://script.google.com/macros/s/AKfycbxt9RdUegrIhotBPNQRs6_Nkb3Hy0NF2IJdpL3XyYZXtPbptFhYtUWfAse3Z10VhHCC/exec";
 
+// ОПТИМИЗИРОВАННАЯ ФУНКЦИЯ С ЖЕСТКИМ ТАЙМАУТОМ В 4 СЕКУНДЫ
 function getData($url) {
-    $ch = curl_init($url); curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-    $res = curl_exec($ch); curl_close($ch);
+    $ch = curl_init($url); 
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); 
+    
+    // ФИКС ЗАВИСАНИЯ: если Google не ответил за 4 секунды — сбрасываем, чтобы сайт не тупил
+    curl_setopt($ch, CURLOPT_TIMEOUT, 4); 
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+    
+    // Маскируемся под обычный браузер, чтобы Google не блокировал частые запросы от Render
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    
+    $res = curl_exec($ch); 
+    curl_close($ch);
+    
     return json_decode($res, true) ?: [];
 }
 
@@ -38,7 +50,6 @@ if (isset($_GET['download_screen'])) {
     echo "Скриншот устарел или еще не долетел."; exit;
 }
 
-// СЛОВАРЬ ПЕРЕВОДА ДЛЯ ТАБЛИЦЫ
 $translateAction = [
     "take_screenshot" => "📸 Скриншот экрана", 
     "shutdown" => "💻 Выключение ПК", 
@@ -46,21 +57,38 @@ $translateAction = [
     "delete" => "🗑 Удаление из системы"
 ];
 
-// ФОНОВЫЙ AJAX ЗАПРОС (ОБНОВЛЕНИЕ ДАННЫХ, ОНЛАЙНА И ЛОГОВ)
+// ФОНОВЫЙ AJAX ЗАПРОС (ОБНОВЛЕНИЕ ДАННЫХ)
 if (isset($_GET['ajax_update'])) {
     $devices = getData($api);
     $logs = getData($api . "?get_logs=1");
     
+    // Если Google лег, берем данные из кэша сессии, чтобы сайт не ломался
+    if (empty($devices) && isset($_SESSION['last_cached_devices'])) $devices = $_SESSION['last_cached_devices'];
+    if (!empty($devices)) $_SESSION['last_cached_devices'] = $devices;
+    
     $dev_status = [];
     foreach ($devices as $d) {
         $dev_id = $d["device_id"]; 
-        $last = strtotime($d["time"] ?? ""); 
-        $age_heartbeat = time() - $last;
         
-        // ИСПРАВЛЕНО: Строго 35 секунд для статуса В СЕТИ
-        $status = ($age_heartbeat <= 35) ? "online" : "offline";
+        // Надежный парсинг времени из Google Таблицы
+        $time_raw = $d["time"] ?? "";
+        $last = 0;
+        if (!empty($time_raw)) {
+            // Заменяем точки на дефисы для корректного распознавания (ДД.ММ.ГГГГ -> ГГГГ-ММ-ДД)
+            if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
+                $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
+            }
+            $last = strtotime($time_raw);
+        }
         
-        if ($age_heartbeat < 60) {
+        $age_heartbeat = ($last > 0) ? (time() - $last) : 999;
+        
+        // Проверка активности строго в рамках 35 секунд
+        $status = ($age_heartbeat <= 35 && $last > 0) ? "online" : "offline";
+        
+        if ($last === 0 || $age_heartbeat > 86400) {
+            $time_str = "давно";
+        } elseif ($age_heartbeat < 60) {
             $time_str = $age_heartbeat . " сек. назад";
         } else {
             $time_str = floor($age_heartbeat/60) . " мин. назад";
@@ -75,19 +103,23 @@ if (isset($_GET['ajax_update'])) {
     }
 
     $log_html = "";
-    foreach ($logs as $l) {
-        $act = $translateAction[$l["action"]] ?? $l["action"];
-        $statusText = "⏳ В очереди"; $statusClass = "status-waiting";
-        if ($l["status"] === "1") { $statusText = "✅ Выполнено"; $statusClass = "status-success"; }
-        if ($l["status"] === "Ошибка") { $statusText = "🛑 Сбой"; $statusClass = "status-error"; }
-        
-        $log_html .= "<tr>
-            <td>".htmlspecialchars($l["id"])."</td>
-            <td>".htmlspecialchars($l["device_id"])."</td>
-            <td>".htmlspecialchars($act)."</td>
-            <td><span class='badge-log {$statusClass}'>{$statusText}</span></td>
-            <td>".htmlspecialchars($l["log"])."</td>
-        </tr>";
+    if (empty($logs)) {
+        $log_html = "<tr><td colspan='5' style='text-align:center; color:#64748b;'>Google Script временно недоступен. Ожидание ответа...</td></tr>";
+    } else {
+        foreach ($logs as $l) {
+            $act = $translateAction[$l["action"]] ?? $l["action"];
+            $statusText = "⏳ В очереди"; $statusClass = "status-waiting";
+            if ($l["status"] === "1") { $statusText = "✅ Выполнено"; $statusClass = "status-success"; }
+            if ($l["status"] === "Ошибка") { $statusText = "🛑 Сбой"; $statusClass = "status-error"; }
+            
+            $log_html .= "<tr>
+                <td>".htmlspecialchars($l["id"])."</td>
+                <td>".htmlspecialchars($l["device_id"])."</td>
+                <td>".htmlspecialchars($act)."</td>
+                <td><span class='badge-log {$statusClass}'>{$statusText}</span></td>
+                <td>".htmlspecialchars($l["log"])."</td>
+            </tr>";
+        }
     }
 
     header('Content-Type: application/json');
@@ -95,18 +127,18 @@ if (isset($_GET['ajax_update'])) {
     exit;
 }
 
-// ОБРАБОТКА ОБЫЧНЫХ POST КОМАНД (Выключение, Стоп, Удаление)
+// ОБРАБОТКА POST КОМАНД
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? ""; 
     $device_id = trim($_POST["device_id"] ?? "");
 
     if (!empty($action) && !empty($device_id)) {
         $postData = ["action" => $action, "device_id" => $device_id];
-        
         $ch = curl_init($api); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData)); 
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4); // И здесь ограничиваем задержку
         curl_exec($ch); 
         curl_close($ch);
     }
@@ -123,11 +155,11 @@ $devices = getData($api);
 <title>Панель управления ПК</title>
 <style>
 body{ margin:0; font-family:system-ui, -apple-system, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
-.header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; letter-spacing: 0.5px;}
+.header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px;}
 .container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; }
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
-.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
+.status{ font-size:11px; padding:4px 10px; border-radius999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online{ background:#064e3b; color:#34d399; } .offline{ background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8;}
 .row b { color:#cbd5e1; }
@@ -158,7 +190,7 @@ td { color:#cbd5e1; }
 </head>
 <body>
 
-<div class="header"> Central PC Control Panel Suite</div>
+<div class="header">🖥 Центральная Панель Управления</div>
 
 <div class="container">
     <?php foreach($devices as $d): $dev_id = $d["device_id"]; ?>
@@ -218,20 +250,18 @@ td { color:#cbd5e1; }
 </div>
 
 <script>
-// ФУНКЦИЯ ОТПРАВКИ СКРИНШОТА БЕЗ ПЕРЕЗАГРУЗКИ (ИСПРАВЛЕНИЕ БАГА)
 function sendScreenshotCommand(deviceId, buttonElement) {
     const originalText = buttonElement.textContent;
     buttonElement.disabled = true;
-    buttonElement.textContent = "⏳ Отправка запроса...";
+    buttonElement.textContent = "⏳ Отправка...";
 
-    // Формируем виртуальную отправку формы через AJAX POST
     const formData = new FormData();
     formData.append('action', 'take_screenshot');
     formData.append('device_id', deviceId);
 
     fetch('', { method: 'POST', body: formData })
         .then(() => {
-            buttonElement.textContent = "✅ В очереди!";
+            buttonElement.textContent = "✅ Отправлено";
             setTimeout(() => {
                 buttonElement.disabled = false;
                 buttonElement.textContent = originalText;
@@ -239,12 +269,11 @@ function sendScreenshotCommand(deviceId, buttonElement) {
         })
         .catch(err => {
             console.error(err);
-            buttonElement.textContent = "🛑 Ошибка!";
+            buttonElement.textContent = "🛑 Ошибка";
             buttonElement.disabled = false;
         });
 }
 
-// АВТООБНОВЛЕНИЕ СТАТУСОВ, ТАЙМЕРОВ И ТАБЛИЦЫ ЛОГОВ (Каждые 3 секунды)
 function updateDashboard() {
     fetch('?ajax_update=1')
         .then(response => response.json())
@@ -266,11 +295,14 @@ function updateDashboard() {
                     screenBox.innerHTML = `<button class="btn-link" style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>`;
                 }
             }
-            document.getElementById('log-table-body').innerHTML = data.logs_html;
+            if(data.logs_html) {
+                document.getElementById('log-table-body').innerHTML = data.logs_html;
+            }
         })
-        .catch(err => console.log("Ошибка автообновления:", err));
+        .catch(err => console.log("Пропуск шага автообновления сети..."));
 }
 
+// Запрашиваем обновление каждые 3 секунды, интерфейс будет "летать"
 setInterval(updateDashboard, 3000);
 updateDashboard();
 </script>
