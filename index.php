@@ -1,4 +1,5 @@
 <?php
+ob_start(); // Защита от ошибки "Headers already sent"
 session_start();
 
 error_reporting(E_ALL);
@@ -23,7 +24,7 @@ if (isset($_POST['screenshot_device_id']) && isset($_FILES['screenshot_file'])) 
     exit;
 }
 
-// СКАЧИВАНИЕ СКРИНШОТА
+// СКАЧИВАНИЕ СКРИНШОТА ИЗ ПАМЯТИ RENDER
 if (isset($_GET['download_screen'])) {
     $dev_id = $_GET['download_screen'];
     if (isset($_SESSION['screenshot_'.$dev_id])) {
@@ -34,10 +35,10 @@ if (isset($_GET['download_screen'])) {
             echo base64_decode($screen['data']); exit;
         }
     }
-    echo "Скриншот устарел."; exit;
+    echo "Скриншот устарел или еще не долетел."; exit;
 }
 
-// СЛОВАРЬ ПЕРЕВОДА КОМАНД ДЛЯ ТАБЛИЦЫ ЛОГОВ
+// СЛОВАРЬ ПЕРЕВОДА ДЛЯ ТАБЛИЦЫ
 $translateAction = [
     "take_screenshot" => "📸 Скриншот экрана", 
     "shutdown" => "💻 Выключение ПК", 
@@ -45,7 +46,7 @@ $translateAction = [
     "delete" => "🗑 Удаление из системы"
 ];
 
-// ФОНОВЫЙ AJAX ЗАПРОС ОБНОВЛЕНИЯ ДАННЫХ И ЛОГОВ
+// ФОНОВЫЙ AJAX ЗАПРОС (ОБНОВЛЕНИЕ ДАННЫХ, ОНЛАЙНА И ЛОГОВ)
 if (isset($_GET['ajax_update'])) {
     $devices = getData($api);
     $logs = getData($api . "?get_logs=1");
@@ -56,7 +57,7 @@ if (isset($_GET['ajax_update'])) {
         $last = strtotime($d["time"] ?? ""); 
         $age_heartbeat = time() - $last;
         
-        // ФИКС АКТИВНОСТИ: Если был в сети последние 35 секунд — ОНЛАЙН
+        // ИСПРАВЛЕНО: Строго 35 секунд для статуса В СЕТИ
         $status = ($age_heartbeat <= 35) ? "online" : "offline";
         
         if ($age_heartbeat < 60) {
@@ -94,16 +95,13 @@ if (isset($_GET['ajax_update'])) {
     exit;
 }
 
-// ИСПРАВЛЕННЫЙ БЛОК ОТПРАВКИ КОМАНД В GOOGLE SCRIPT ИЗ PHP
+// ОБРАБОТКА ОБЫЧНЫХ POST КОМАНД (Выключение, Стоп, Удаление)
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? ""; 
     $device_id = trim($_POST["device_id"] ?? "");
 
     if (!empty($action) && !empty($device_id)) {
         $postData = ["action" => $action, "device_id" => $device_id];
-        if ($action === "set_name") {
-            $postData["name"] = $_POST["name"] ?? "";
-        }
         
         $ch = curl_init($api); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
@@ -129,41 +127,28 @@ body{ margin:0; font-family:system-ui, -apple-system, sans-serif; background:#09
 .container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; }
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
-.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase; letter-spacing: 0.5px;}
+.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online{ background:#064e3b; color:#34d399; } .offline{ background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8;}
 .row b { color:#cbd5e1; }
-input{ width:100%; margin-top:8px; padding:8px; border-radius:8px; border:1px solid #334155; background:#0b1220; color:white; box-sizing:border-box; }
 
-/* УЛУЧШЕННЫЕ СТИЛИ КНОПОК С СОВМЕСТИМЫМИ ЦВЕТАМИ */
 button, .btn-link{ 
-    width:100%; 
-    margin-top:8px; 
-    padding:10px; 
-    border-radius:8px; 
-    border:none; 
-    cursor:pointer; 
-    font-weight:600; 
-    display:block; 
-    text-align:center; 
-    box-sizing:border-box; 
-    text-decoration:none; 
-    font-size:13px;
+    width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; 
+    font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px;
     transition: background 0.2s ease, transform 0.1s ease;
 }
 button:active, .btn-link:active { transform: scale(0.98); }
 
-.blue   { background:#4f46e5; color:#ffffff; } .blue:hover  { background:#4338ca; } /* Индиго */
-.green  { background:#059669; color:#ffffff; } .green:hover { background:#047857; } /* Изумрудный */
-.orange { background:#d97706; color:#ffffff; } .orange:hover{ background:#b45309; } /* Янтарный */
-.red    { background:#dc2626; color:#ffffff; } .red:hover   { background:#b91c1c; } /* Алый */
-.gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } 
-.gray-danger:hover { background:#991b1b; color:#ffffff; border-color:#991b1b; } /* Приглушенный красный */
+.blue   { background:#4f46e5; color:#ffffff; } .blue:hover  { background:#4338ca; }
+.green  { background:#059669; color:#ffffff; } .green:hover { background:#047857; }
+.orange { background:#d97706; color:#ffffff; } .orange:hover{ background:#b45309; }
+.red    { background:#dc2626; color:#ffffff; } .red:hover   { background:#b91c1c; }
+.gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } .gray-danger:hover { background:#991b1b; color:#ffffff; }
 
-.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); overflow-x:auto;}
+.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
 table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:14px; text-align:left;}
 th, td{ padding:12px; border-bottom:1px solid #1f2937; }
-th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px; letter-spacing: 0.5px;}
+th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 td { color:#cbd5e1; }
 .badge-log { padding:3px 8px; border-radius:6px; font-size:11px; font-weight:bold;}
 .status-waiting { background:#1e3a8a; color:#93c5fd; }
@@ -173,23 +158,19 @@ td { color:#cbd5e1; }
 </head>
 <body>
 
-<div class="header">🖥 Центральная Панель Управления</div>
+<div class="header"> Central PC Control Panel Suite</div>
 
 <div class="container">
     <?php foreach($devices as $d): $dev_id = $d["device_id"]; ?>
     <div class="card" data-id="<?=htmlspecialchars($dev_id)?>">
         <div class="name"><?=htmlspecialchars($d["name"] ?? "Неизвестный ПК")?></div>
-        <div class="status-badge status offline">Загрузка...</div>
+        <div class="status-badge status offline">Синхронизация...</div>
 
         <div class="row"><b>IP-адрес:</b> <?=htmlspecialchars($d["ip"] ?? "не определен")?></div>
         <div class="row"><b>ID Железа:</b> <span style="font-size:11px; font-family:monospace;"><?=htmlspecialchars($dev_id)?></span></div>
         <div class="row"><b>Активность:</b> <span class="heartbeat-time">проверка...</span></div>
 
-        <form method="POST" style="margin-top:14px;">
-            <input type="hidden" name="action" value="take_screenshot">
-            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
-            <button class="blue">📸 Запросить скриншот</button>
-        </form>
+        <button class="blue" onclick="sendScreenshotCommand('<?=htmlspecialchars($dev_id)?>', this)">📸 Запросить скриншот</button>
 
         <div class="screenshot-container">
             <button class="btn-link" style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>
@@ -231,17 +212,43 @@ td { color:#cbd5e1; }
             </tr>
         </thead>
         <tbody id="log-table-body">
-            <tr><td colspan="5" style="text-align:center; color:#64748b;">Синхронизация логов событий...</td></tr>
+            <tr><td colspan="5" style="text-align:center; color:#64748b;">Синхронизация логов...</td></tr>
         </tbody>
     </table>
 </div>
 
 <script>
+// ФУНКЦИЯ ОТПРАВКИ СКРИНШОТА БЕЗ ПЕРЕЗАГРУЗКИ (ИСПРАВЛЕНИЕ БАГА)
+function sendScreenshotCommand(deviceId, buttonElement) {
+    const originalText = buttonElement.textContent;
+    buttonElement.disabled = true;
+    buttonElement.textContent = "⏳ Отправка запроса...";
+
+    // Формируем виртуальную отправку формы через AJAX POST
+    const formData = new FormData();
+    formData.append('action', 'take_screenshot');
+    formData.append('device_id', deviceId);
+
+    fetch('', { method: 'POST', body: formData })
+        .then(() => {
+            buttonElement.textContent = "✅ В очереди!";
+            setTimeout(() => {
+                buttonElement.disabled = false;
+                buttonElement.textContent = originalText;
+            }, 2000);
+        })
+        .catch(err => {
+            console.error(err);
+            buttonElement.textContent = "🛑 Ошибка!";
+            buttonElement.disabled = false;
+        });
+}
+
+// АВТООБНОВЛЕНИЕ СТАТУСОВ, ТАЙМЕРОВ И ТАБЛИЦЫ ЛОГОВ (Каждые 3 секунды)
 function updateDashboard() {
     fetch('?ajax_update=1')
         .then(response => response.json())
         .then(data => {
-            // 1. Обновление карточек ПК
             for (let dev_id in data.devices) {
                 let card = document.querySelector(`.card[data-id="${dev_id}"]`);
                 if (!card) continue;
@@ -259,10 +266,9 @@ function updateDashboard() {
                     screenBox.innerHTML = `<button class="btn-link" style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>`;
                 }
             }
-            // 2. Автоматическое обновление таблицы отчетов
             document.getElementById('log-table-body').innerHTML = data.logs_html;
         })
-        .catch(err => console.log("Ошибка обновления:", err));
+        .catch(err => console.log("Ошибка автообновления:", err));
 }
 
 setInterval(updateDashboard, 3000);
