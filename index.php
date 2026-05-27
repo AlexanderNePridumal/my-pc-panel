@@ -130,4 +130,144 @@ body{ margin:0; font-family:system-ui, -apple-system, sans-serif; background:#09
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
 .status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase; letter-spacing: 0.5px;}
-.
+.online{ background:#064e3b; color:#34d399; } .offline{ background:#374151; color:#9ca3af; }
+.row{ margin-top:10px; font-size:13px; color:#94a3b8;}
+.row b { color:#cbd5e1; }
+input{ width:100%; margin-top:8px; padding:8px; border-radius:8px; border:1px solid #334155; background:#0b1220; color:white; box-sizing:border-box; }
+
+/* УЛУЧШЕННЫЕ СТИЛИ КНОПОК С СОВМЕСТИМЫМИ ЦВЕТАМИ */
+button, .btn-link{ 
+    width:100%; 
+    margin-top:8px; 
+    padding:10px; 
+    border-radius:8px; 
+    border:none; 
+    cursor:pointer; 
+    font-weight:600; 
+    display:block; 
+    text-align:center; 
+    box-sizing:border-box; 
+    text-decoration:none; 
+    font-size:13px;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+button:active, .btn-link:active { transform: scale(0.98); }
+
+.blue   { background:#4f46e5; color:#ffffff; } .blue:hover  { background:#4338ca; } /* Индиго */
+.green  { background:#059669; color:#ffffff; } .green:hover { background:#047857; } /* Изумрудный */
+.orange { background:#d97706; color:#ffffff; } .orange:hover{ background:#b45309; } /* Янтарный */
+.red    { background:#dc2626; color:#ffffff; } .red:hover   { background:#b91c1c; } /* Алый */
+.gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } 
+.gray-danger:hover { background:#991b1b; color:#ffffff; border-color:#991b1b; } /* Приглушенный красный */
+
+.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); overflow-x:auto;}
+table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:14px; text-align:left;}
+th, td{ padding:12px; border-bottom:1px solid #1f2937; }
+th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px; letter-spacing: 0.5px;}
+td { color:#cbd5e1; }
+.badge-log { padding:3px 8px; border-radius:6px; font-size:11px; font-weight:bold;}
+.status-waiting { background:#1e3a8a; color:#93c5fd; }
+.status-success { background:#064e3b; color:#a7f3d0; }
+.status-error { background:#7f1d1d; color:#fca5a5; }
+</style>
+</head>
+<body>
+
+<div class="header">🖥 Центральная Панель Управления</div>
+
+<div class="container">
+    <?php foreach($devices as $d): $dev_id = $d["device_id"]; ?>
+    <div class="card" data-id="<?=htmlspecialchars($dev_id)?>">
+        <div class="name"><?=htmlspecialchars($d["name"] ?? "Неизвестный ПК")?></div>
+        <div class="status-badge status offline">Загрузка...</div>
+
+        <div class="row"><b>IP-адрес:</b> <?=htmlspecialchars($d["ip"] ?? "не определен")?></div>
+        <div class="row"><b>ID Железа:</b> <span style="font-size:11px; font-family:monospace;"><?=htmlspecialchars($dev_id)?></span></div>
+        <div class="row"><b>Активность:</b> <span class="heartbeat-time">проверка...</span></div>
+
+        <form method="POST" style="margin-top:14px;">
+            <input type="hidden" name="action" value="take_screenshot">
+            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+            <button class="blue">📸 Запросить скриншот</button>
+        </form>
+
+        <div class="screenshot-container">
+            <button class="btn-link" style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>
+        </div>
+
+        <hr style="border-color:#1f2937; margin:15px 0;">
+
+        <form method="POST">
+            <input type="hidden" name="action" value="stop_client">
+            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+            <button class="orange" onclick="return confirm('Остановить программу-агент на удаленном ПК?')">Закрыть клиента</button>
+        </form>
+
+        <form method="POST">
+            <input type="hidden" name="action" value="shutdown">
+            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+            <button class="red" onclick="return confirm('Вы действительно хотите ВЫКЛЮЧИТЬ компьютер?')">Выключить ПК</button>
+        </form>
+
+        <form method="POST">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+            <button class="gray-danger" onclick="return confirm('Удалить устройство из базы данных панели?')">Удалить устройство</button>
+        </form>
+    </div>
+    <?php endforeach; ?>
+</div>
+
+<div class="log-section">
+    <div class="name" style="font-size:16px; color:#f1f5f9;">📋 Отчет о событиях и этапах выполнения</div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID Задачи</th>
+                <th>ID Устройства</th>
+                <th>Действие / Команда</th>
+                <th>Текущий статус</th>
+                <th>Этап выполнения / Лог ошибки</th>
+            </tr>
+        </thead>
+        <tbody id="log-table-body">
+            <tr><td colspan="5" style="text-align:center; color:#64748b;">Синхронизация логов событий...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+function updateDashboard() {
+    fetch('?ajax_update=1')
+        .then(response => response.json())
+        .then(data => {
+            // 1. Обновление карточек ПК
+            for (let dev_id in data.devices) {
+                let card = document.querySelector(`.card[data-id="${dev_id}"]`);
+                if (!card) continue;
+
+                let badge = card.querySelector('.status-badge');
+                badge.textContent = data.devices[dev_id].status === 'online' ? 'В сети' : 'Не в сети';
+                badge.className = `status-badge status ${data.devices[dev_id].status}`;
+
+                card.querySelector('.heartbeat-time').textContent = data.devices[dev_id].time_text;
+
+                let screenBox = card.querySelector('.screenshot-container');
+                if (data.devices[dev_id].has_screenshot) {
+                    screenBox.innerHTML = `<a href="?download_screen=${encodeURIComponent(dev_id)}" class="btn-link green">📥 Скачать скриншот (Доступен ${data.devices[dev_id].screenshot_left}с.)</a>`;
+                } else {
+                    screenBox.innerHTML = `<button class="btn-link" style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>`;
+                }
+            }
+            // 2. Автоматическое обновление таблицы отчетов
+            document.getElementById('log-table-body').innerHTML = data.logs_html;
+        })
+        .catch(err => console.log("Ошибка обновления:", err));
+}
+
+setInterval(updateDashboard, 3000);
+updateDashboard();
+</script>
+
+</body>
+</html>
