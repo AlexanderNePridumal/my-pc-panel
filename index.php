@@ -83,21 +83,49 @@ if (isset($_GET['get_devices_ajax'])) {
 }
 
 // AJAX ОБНОВЛЕНИЕ 2: ТОЛЬКО ЛОГИ ТАБЛИЦЫ (Редкий запрос)
+// AJAX ОБНОВЛЕНИЕ 2: ТОЛЬКО ЛОГИ ТАБЛИЦЫ (Редкий запрос)
 if (isset($_GET['get_logs_ajax'])) {
     $logs = getData($api . "?get_logs=1");
     $translateAction = ["take_screenshot" => "📸 Скриншот", "shutdown" => "💻 Выключение", "stop_client" => "❌ Остановка", "delete" => "🗑 Удаление"];
     $log_html = "";
+    
     if(empty($logs)) {
         $log_html = "<tr><td colspan='5' style='text-align:center; color:#64748b;'>Нет ответов от таблицы...</td></tr>";
     } else {
         foreach ($logs as $l) {
-            $act = $translateAction[$l["action"]] ?? $l["action"];
-            $statusText = $l["status"] === "1" ? "✅ Выполнено" : ($l["status"] === "Ошибка" ? "🛑 Сбой" : "⏳ В очереди");
-            $statusClass = $l["status"] === "1" ? "status-success" : ($l["status"] === "Ошибка" ? "status-error" : "status-waiting");
-            $log_html .= "<tr><td>{$l['id']}</td><td>{$l['device_id']}</td><td>{$act}</td><td><span class='badge-log {$statusClass}'>{$statusText}</span></td><td>{$l['log']}</td></tr>";
+            // ФИКС: Проверяем, что строка таблицы не пустая и содержит нужные ключи
+            if (!isset($l["id"]) || empty($l["device_id"])) {
+                continue; // Пропускаем пустые или кривые строки в Google Таблице
+            }
+
+            $action_key = $l["action"] ?? "";
+            $act = $translateAction[$action_key] ?? $action_key;
+            
+            $status = $l["status"] ?? "";
+            $statusText = $status === "1" ? "✅ Выполнено" : ($status === "Ошибка" ? "🛑 Сбой" : "⏳ В очереди");
+            $statusClass = $status === "1" ? "status-success" : ($status === "Ошибка" ? "status-error" : "status-waiting");
+            
+            $id = htmlspecialchars($l["id"]);
+            $dev_id = htmlspecialchars($l["device_id"]);
+            $log_msg = htmlspecialchars($l["log"] ?? "Нет данных");
+
+            $log_html .= "<tr>
+                <td>{$id}</td>
+                <td>{$dev_id}</td>
+                <td>{$act}</td>
+                <td><span class='badge-log {$statusClass}'>{$statusText}</span></td>
+                <td>{$log_msg}</td>
+            </tr>";
         }
     }
-    echo $log_html; exit;
+    
+    // Если после фильтрации все строки оказались пустыми
+    if (empty($log_html)) {
+        $log_html = "<tr><td colspan='5' style='text-align:center; color:#64748b;'>История событий пуста</td></tr>";
+    }
+    
+    echo $log_html; 
+    exit;
 }
 
 // ОБРАБОТКА КОМАНД ИЗ ФОРМ
