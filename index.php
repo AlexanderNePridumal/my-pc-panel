@@ -4,7 +4,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // !!! СЮДА ВСТАВЬТЕ ВАШ URL ИЗ GOOGLE APPS SCRIPT !!!
-$api = "https://script.google.com/macros/s/AKfycbyTKy2BvPGAOdT7KrUkgOGsotZLXu83JYI3jeGgIDsTr-r7x3BuOqKFToK3OjQSwbNi/exec";
+$api = "https://script.google.com/macros/s/AKfycbxt9RdUegrIhotBPNQRs6_Nkb3Hy0NF2IJdpL3XyYZXtPbptFhYtUWfAse3Z10VhHCC/exec";
 
 function getData($url)
 {
