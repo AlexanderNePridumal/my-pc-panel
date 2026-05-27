@@ -40,16 +40,19 @@ if (isset($_GET['download_screen'])) {
 // СЛОВАРЬ ПЕРЕВОДА КОМАНД ДЛЯ ТАБЛИЦЫ ЛОГОВ
 $translateAction = ["take_screenshot" => "📸 Скриншот экрана", "shutdown" => "💻 Выключение ПК", "stop_client" => "❌ Остановка клиента", "delete" => "🗑 Удаление из системы"];
 
-// ФОНОВЫЙ AJAX ЗАПРОС ОБНОВЛЕНИЯ ДАННЫХ И ЛОГОВ
-if (isset($_GET['ajax_update'])) {
-    $devices = getData($api);
-    $logs = getData($api . "?get_logs=1");
+// Внутри if (isset($_GET['ajax_update'])) { ... }
+foreach ($devices as $d) {
+    $dev_id = $d["device_id"]; 
+    $last = strtotime($d["time"] ?? ""); 
+    $age_heartbeat = time() - $last;
     
-    $dev_status = [];
-    foreach ($devices as $d) {
-        $dev_id = $d["device_id"]; $last = strtotime($d["time"] ?? ""); $age = time() - $last;
-        $status = ($age < 90) ? "online" : "offline";
-        $time_str = ($age < 60) ? $age . " сек. назад" : floor($age/60) . " мин. назад";
+    // ФИКС: Если последнее обновление было меньше 35 секунд назад — статус ONLINE
+    $status = ($age_heartbeat <= 35) ? "online" : "offline";
+    
+    if ($age_heartbeat < 60) {
+        $time_str = $age_heartbeat . " сек. назад";
+    } else {
+        $time_str = floor($age_heartbeat/60) . " мин. назад";
         
         $has_screenshot = false; $seconds_left = 0;
         if (isset($_SESSION['screenshot_'.$dev_id])) {
