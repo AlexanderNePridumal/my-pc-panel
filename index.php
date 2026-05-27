@@ -217,11 +217,11 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
         <div class="row"><b>ID:</b> <span style="font-size:11px; font-family:monospace;"><?=htmlspecialchars($dev_id)?></span></div>
         <div class="row"><b>Активность:</b> <span class="heartbeat-time">синхронизация...</span></div>
 
-        <form method="POST" style="margin-bottom: 0;">
-            <input type="hidden" name="action" value="take_screenshot">
-            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
-            <button class="blue">📸 Запросить скриншот</button>
-        </form>
+        <form method="POST" action="index.php" style="margin-bottom: 0;">
+    <input type="hidden" name="action" value="take_screenshot">
+    <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+    <button type="submit" class="blue" onclick="return confirm('Отправить команду на снимок экрана?')">📸 Запросить скриншот</button>
+</form>
         <div class="screenshot-container"></div>
 
         <hr style="border-color:#1f2937; margin:15px 0;">
