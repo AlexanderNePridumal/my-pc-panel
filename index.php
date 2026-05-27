@@ -10,26 +10,22 @@ $api = "https://script.google.com/macros/s/AKfycbxt9RdUegrIhotBPNQRs6_Nkb3Hy0NF2
 
 function getData($url) {
     $ch = curl_init();
-    // ИСПРАВЛЕНИЕ ЗАВИСАНИЯ: Меняем формат запроса к Google, чтобы он отдавал данные напрямую без 302 редиректа
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); 
     curl_setopt($ch, CURLOPT_AUTOREFERER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15); // Ограничиваем максимальное ожидание до 15 секунд
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    
-    // Добавляем заголовок обычного браузера, чтобы Google не думал, что это спам-бот от Render
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept: application/json'
     ]);
-
     $res = curl_exec($ch); 
     curl_close($ch);
     return json_decode($res, true) ?: [];
 }
 
-// ПРИЕМ СКРИНШОТА ОТ C# КЛИЕНТА
+// ПРИЕМ СКРИНШОТА ОТ C# КЛИЕНТА (Сюда бот шлет картинку)
 if (isset($_POST['screenshot_device_id']) && isset($_FILES['screenshot_file'])) {
     $dev_id = $_POST['screenshot_device_id'];
     $file_path = $_FILES['screenshot_file']['tmp_name'];
@@ -38,18 +34,18 @@ if (isset($_POST['screenshot_device_id']) && isset($_FILES['screenshot_file'])) 
     exit;
 }
 
-// СКАЧИВАНИЕ СКРИНШОТА ИЗ ПАМЯТИ RENDER
+// СКАЧИВАНИЕ СКРИНШОТА
 if (isset($_GET['download_screen'])) {
     $dev_id = $_GET['download_screen'];
     if (isset($_SESSION['screenshot_'.$dev_id])) {
         $screen = $_SESSION['screenshot_'.$dev_id];
-        if (time() - $screen['time'] <= 45) { // Увеличили время жизни до 45 секунд
+        if (time() - $screen['time'] <= 45) { 
             header('Content-Type: image/jpeg');
             header('Content-Disposition: attachment; filename="screenshot_'.$dev_id.'.jpg"');
             echo base64_decode($screen['data']); exit;
         }
     }
-    echo "Скриншот устарел или еще не долетел."; exit;
+    echo "Скриншот устарел или еще не получен от бота."; exit;
 }
 
 $translateAction = [
@@ -59,7 +55,7 @@ $translateAction = [
     "delete" => "🗑 Удаление из системы"
 ];
 
-// ФОНОВЫЙ AJAX ЗАПРОС (ОБНОВЛЕНИЕ ДАННЫХ И ТАБЛИЦЫ ОНЛАЙНА)
+// ФОНОВЫЙ AJAX ДЛЯ ОБНОВЛЕНИЯ ИНТЕРФЕЙСА (РАБОТАЕТ БЕЗ ПЕРЕЗАГРУЗОК)
 if (isset($_GET['ajax_update'])) {
     $devices = getData($api);
     $logs = getData($api . "?get_logs=1");
@@ -68,12 +64,11 @@ if (isset($_GET['ajax_update'])) {
     foreach ($devices as $d) {
         $dev_id = $d["device_id"]; 
         
-        // ИСПРАВЛЕНИЕ: Жёстко вырезаем дату в формате ДД.ММ.ГГГГ и превращаем её в Timestamp, понятный для Render
+        // Надежный парсинг даты Google Таблицы в формат PHP
         $time_raw = $d["time"] ?? "";
         $last = 0;
         if (!empty($time_raw)) {
             if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
-                // Превращаем в формат YYYY-MM-DD HH:MM:SS
                 $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
             }
             $last = strtotime($time_raw);
@@ -81,7 +76,7 @@ if (isset($_GET['ajax_update'])) {
         
         $age_heartbeat = ($last > 0) ? (time() - $last) : 999;
         
-        // Теперь онлайн работает чётко (C# шлёт каждые 15 сек, если уложился в 35 — он онлайн)
+        // Проверка активности строго за последние 35 секунд
         $status = ($age_heartbeat <= 35 && $last > 0) ? "online" : "offline";
         
         if ($last === 0 || $age_heartbeat > 86400) {
@@ -121,7 +116,7 @@ if (isset($_GET['ajax_update'])) {
     exit;
 }
 
-// ОБРАБОТКА POST КОМАНД С САЙТА В GOOGLE ТАБЛИЦУ
+// ЕДИНЫЙ НАДЕЖНЫЙ ЖЕЛЕЗНЫЙ МЕТОД ОТПРАВКИ ВСЕХ КОМАНД (ВКЛЮЧАЯ СКРИНШОТ)
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? ""; 
     $device_id = trim($_POST["device_id"] ?? "");
@@ -134,11 +129,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData)); 
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
         curl_exec($ch); 
         curl_close($ch);
     }
-    header("Location: " . $_SERVER['PHP_SELF']); exit;
+    // После отправки формы перенаправляем пользователя на чистый URL, убирая зависания
+    header("Location: " . $_SERVER['PHP_SELF']); 
+    exit;
 }
 
 $devices = getData($api);
@@ -158,7 +155,8 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .online{ background:#064e3b; color:#34d399; } .offline{ background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8;}
 button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px;}
-.blue { background:#4f46e5; color:white; } .green { background:#059669; color:white; }
+.blue { background:#4f46e5; color:white; } .blue:hover { background:#4338ca; }
+.green { background:#059669; color:white; }
 .orange { background:#d97706; color:white; } .red { background:#dc2626; color:white; }
 .gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; }
 .log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
@@ -172,7 +170,7 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 </head>
 <body>
 
-<div class="header"> Central PC Control Panel</div>
+<div class="header">🖥 Центральная Панель Управления</div>
 
 <div class="container">
     <?php foreach($devices as $d): $dev_id = $d["device_id"]; ?>
@@ -184,7 +182,12 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
         <div class="row"><b>ID Железа:</b> <span style="font-size:11px; font-family:monospace;"><?=htmlspecialchars($dev_id)?></span></div>
         <div class="row"><b>Активность:</b> <span class="heartbeat-time">проверка...</span></div>
 
-        <button class="blue" onclick="sendScreenshotCommand('<?=htmlspecialchars($dev_id)?>', this)">📸 Запросить скриншот</button>
+        <form method="POST" style="margin-bottom: 0;">
+            <input type="hidden" name="action" value="take_screenshot">
+            <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
+            <button class="blue">📸 Запросить скриншот</button>
+        </form>
+
         <div class="screenshot-container"></div>
 
         <hr style="border-color:#1f2937; margin:15px 0;">
@@ -229,29 +232,6 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 </div>
 
 <script>
-function sendScreenshotCommand(deviceId, buttonElement) {
-    const originalText = buttonElement.textContent;
-    buttonElement.disabled = true;
-    buttonElement.textContent = "⏳ Отправка...";
-
-    const formData = new FormData();
-    formData.append('action', 'take_screenshot');
-    formData.append('device_id', deviceId);
-
-    fetch('', { method: 'POST', body: formData })
-        .then(() => {
-            buttonElement.textContent = "✅ В очереди!";
-            setTimeout(() => {
-                buttonElement.disabled = false;
-                buttonElement.textContent = originalText;
-            }, 3000);
-        })
-        .catch(err => {
-            buttonElement.textContent = "🛑 Ошибка!";
-            buttonElement.disabled = false;
-        });
-}
-
 function updateDashboard() {
     fetch('?ajax_update=1')
         .then(response => response.json())
@@ -260,12 +240,15 @@ function updateDashboard() {
                 let card = document.querySelector(`.card[data-id="${dev_id}"]`);
                 if (!card) continue;
 
+                // Обновляем плашку ОНЛАЙН / ОФФЛАЙН (До 35 секунд)
                 let badge = card.querySelector('.status-badge');
                 badge.textContent = data.devices[dev_id].status === 'online' ? 'В сети' : 'Не в сети';
                 badge.className = `status-badge status ${data.devices[dev_id].status}`;
 
+                // Исправлено: Пишем время последней активности ("Х сек. назад")
                 card.querySelector('.heartbeat-time').textContent = data.devices[dev_id].time_text;
 
+                // Показываем зеленую кнопку скачивания, когда C# загрузит скриншот в память сессии
                 let screenBox = card.querySelector('.screenshot-container');
                 if (data.devices[dev_id].has_screenshot) {
                     screenBox.innerHTML = `<a href="?download_screen=${encodeURIComponent(dev_id)}" class="btn-link green" style="margin-top:10px; padding:10px; border-radius:8px; color:white; display:block; text-align:center; font-weight:bold; background:#059669; text-decoration:none;">📥 Скачать скриншот (Осталось ${data.devices[dev_id].screenshot_left}с.)</a>`;
@@ -275,11 +258,11 @@ function updateDashboard() {
             }
             document.getElementById('log-table-body').innerHTML = data.logs_html;
         })
-        .catch(err => console.log("Ожидание стабильного ответа Google..."));
+        .catch(err => console.log("Синхронизация..."));
 }
 
-// Запрашиваем обновление раз в 4 секунды, чтобы не перегружать API Google Таблиц
-setInterval(updateDashboard, 4000);
+// Фоновое обновление времени онлайна и кнопок скачивания каждые 3 секунды
+setInterval(updateDashboard, 3000);
 updateDashboard();
 </script>
 </body>
