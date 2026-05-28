@@ -3,7 +3,7 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
-
+//url
 $api = "https://script.google.com/macros/s/AKfycbxRsRgjvfGlyEsZZYo2U9qDTMnx_JXY9WIaEPgdy8He6eJt3zRf6iLOOAqmC9S63T03/exec";
 
 function getData($url) {
