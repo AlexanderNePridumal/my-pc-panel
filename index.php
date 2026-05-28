@@ -3,69 +3,75 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
-//url
+// !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
 $api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
+// 1. ПРИЕМ СКРИНШОТА ОТ C# БОТА (Сохранение на диск)
+if (isset($_POST['screenshot_device_id']) && isset($_FILES['screenshot_file'])) {
+    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
+    $upload_dir = __DIR__ . '/screenshots/';
+    
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0777, true);
+    }
+    
+    $target_file = $upload_dir . 'screen_' . $dev_id . '.jpg';
+    if (move_uploaded_file($_FILES['screenshot_file']['tmp_name'], $target_file)) {
+        echo "SERVER_SAVED_SCREENSHOT";
+    } else {
+        header("HTTP/1.1 500 Internal Server Error");
+        echo "Failed to save screenshot file.";
+    }
+    exit;
+}
+
+// 2. СКАЧИВАНИЕ СКРИНШОТА С САЙТА ПРИ КЛИКЕ НА ЗЕЛЕНУЮ КНОПКУ
+if (isset($_GET['download_screen'])) {
+    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['download_screen']);
+    $file = __DIR__ . '/screenshots/screen_' . $dev_id . '.jpg';
+    
+    if (file_exists($file)) {
+        header('Content-Type: image/jpeg');
+        header('Content-Disposition: attachment; filename="screenshot_'.$dev_id.'.jpg"');
+        readfile($file);
+    } else {
+        echo "Скриншот еще не получен ботом или удален.";
+    }
+    exit;
+}
+
+// 3. УНИВЕРСАЛЬНЫЙ ВСЕЯДНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ КНОПОК САЙТА
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $action = isset($_POST["action"]) ? trim($_POST["action"]) : ""; 
+    $device_id = isset($_POST["device_id"]) ? trim($_POST["device_id"]) : "";
+
+    if (!empty($action) && !empty($device_id)) {
+        $ch = curl_init($api); 
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(["action" => $action, "device_id" => $device_id])); 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_exec($ch); 
+        curl_close($ch);
+    }
+    header("Location: " . $_SERVER['PHP_SELF']); 
+    exit;
+}
+
+// Функция получения данных из Google Таблицы
 function getData($url) {
     $ch = curl_init(); 
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); 
     curl_setopt($ch, CURLOPT_TIMEOUT, 6); 
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
     $res = curl_exec($ch); 
     curl_close($ch);
     return json_decode($res, true) ?: [];
 }
 
-// ПРИЕМ СКРИНШОТА ОТ БОТА
-if (isset($_POST['screenshot_device_id']) && isset($_FILES['screenshot_file'])) {
-    $dev_id = $_POST['screenshot_device_id'];
-    $file_path = $_FILES['screenshot_file']['tmp_name'];
-    $_SESSION['screenshot_'.$dev_id] = [ 'time' => time(), 'data' => base64_encode(file_get_contents($file_path)) ];
-    echo "SERVER_SAVED_SCREENSHOT"; exit;
-}
-
-// СКАЧИВАНИЕ СКРИНШОТА
-if (isset($_GET['download_screen'])) {
-    $dev_id = $_GET['download_screen'];
-    if (isset($_SESSION['screenshot_'.$dev_id])) {
-        $screen = $_SESSION['screenshot_'.$dev_id];
-        if (time() - $screen['time'] <= 60) { 
-            header('Content-Type: image/jpeg');
-            header('Content-Disposition: attachment; filename="screenshot_'.$dev_id.'.jpg"');
-            echo base64_decode($screen['data']); exit;
-        }
-    }
-    echo "Скриншот устарел или еще не получен."; exit;
-}
-
-// ЕДИНЫЙ ВСЕЯДНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ КНОПОК
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $action = isset($_POST["action"]) ? trim($_POST["action"]) : ""; 
-    $device_id = isset($_POST["device_id"]) ? trim($_POST["device_id"]) : "";
-
-    // Шлем ЛЮБУЮ команду, которая пришла из формы, без лишних фильтров
-    if (!empty($action) && !empty($device_id)) {
-        $ch = curl_init($api); 
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-            "action" => $action,
-            "device_id" => $device_id
-        ])); 
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-        curl_exec($ch); 
-        curl_close($ch);
-    }
-    
-    // Перенаправляем обратно, чтобы не было дублей при обновлении
-    header("Location: " . $_SERVER['PHP_SELF']); 
-    exit;
-}
-
-// Загружаем данные из таблицы для отрисовки страницы
+// Загружаем данные из таблицы для рендеринга страницы
 $devices = getData($api);
 $logs = getData($api . "?get_logs=1");
 ?>
@@ -73,7 +79,7 @@ $logs = getData($api . "?get_logs=1");
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Панель управления ПК</title>
+<title>Центральная Панель Управления</title>
 <style>
 body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
 .header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; display:flex; justify-content:space-between; align-items:center;}
@@ -84,7 +90,7 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; transition: border-color 0.3s; }
 .online-card { border-color: #064e3b; }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
-.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
+.status{ font-size:11px; padding:4px 10px; border-radius999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online{ background:#064e3b; color:#34d399; } .offline{ background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8; word-break: break-all;}
 button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px; transition: 0.2s;}
@@ -99,14 +105,14 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; }
 th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 .badge-log { padding:3px 8px; border-radius:6px; font-size:11px; font-weight:bold;}
 .status-waiting { background:#1e3a8a; color:#93c5fd; } .status-success { background:#064e3b; color:#a7f3d0; } .status-error { background:#7f1d1d; color:#fca5a5; }
-.process-box { background:#030712; padding:10px; border-radius:8px; border:1px solid #1f2937; font-family:monospace; font-size:11px; color:#10b981; max-height:80px; overflow-y:auto; margin-top:8px; display:none; white-space: pre-wrap; }
+.process-box { background:#030712; padding:10px; border-radius:8px; border:1px solid #1f2937; font-family:monospace; font-size:11px; color:#10b981; max-height:120px; overflow-y:auto; margin-top:8px; display:none; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 
 <div class="header">
     <span>🖥 Центральная Панель Управления</span>
-    <div class="sync-indicator"><span class="dot"></span>Автообновление (15с)</div>
+    <div class="sync-indicator"><span class="dot"></span>Автообновление (10с)</div>
 </div>
 
 <div class="container">
@@ -121,7 +127,7 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
             if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
                 $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
             }
-            $last = strtotime($time_raw);
+            $last = @strtotime($time_raw);
         }
         $age = ($last > 0) ? (time() - $last) : 999;
         $isOnline = ($age <= 35 && $last > 0);
@@ -146,7 +152,7 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 
         <hr style="border-color:#1f2937; margin:15px 0;">
 
-        <form method="POST" action="index.php" style="margin-bottom: 6px;">
+        <form method="POST" action="" style="margin-bottom: 6px;">
             <input type="hidden" name="action" value="take_screenshot">
             <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
             <button type="submit" class="blue" onclick="return confirm('Отправить команду на снимок экрана?')">📸 Запросить скриншот</button>
@@ -154,33 +160,30 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 
         <div class="screenshot-container">
             <?php 
-            if (isset($_SESSION['screenshot_'.$dev_id])): 
-                $s_age = time() - $_SESSION['screenshot_'.$dev_id]['time'];
-                if ($s_age <= 60): 
+            $file_path = __DIR__ . '/screenshots/screen_' . $dev_id . '.jpg';
+            if (file_exists($file_path)): 
             ?>
-                <a href="?download_screen=<?=urlencode($dev_id)?>" class="btn-link green">📥 Скачать скриншот (Осталось <?=60 - $s_age?>с.)</a>
+                <a href="?download_screen=<?=urlencode($dev_id)?>" class="btn-link green" target="_blank">📥 Скачать готовый скриншот</a>
             <?php else: ?>
-                <button style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Снимок в памяти устарел</button>
-            <?php endif; else: ?>
                 <button style="background:#1f2937; color:#4b5563; cursor:not-allowed;" disabled>Скриншота в памяти нет</button>
             <?php endif; ?>
         </div>
 
         <hr style="border-color:#1f2937; margin:15px 0;">
 
-        <form method="POST" action="index.php" style="margin-bottom:6px;">
+        <form method="POST" action="" style="margin-bottom:6px;">
             <input type="hidden" name="action" value="stop_client">
             <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
             <button type="submit" class="orange" onclick="return confirm('Выключить клиент программу?')">❌ Закрыть клиента</button>
         </form>
 
-        <form method="POST" action="index.php" style="margin-bottom:6px;">
+        <form method="POST" action="" style="margin-bottom:6px;">
             <input type="hidden" name="action" value="shutdown">
             <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
             <button type="submit" class="red" onclick="return confirm('Выключить компьютер дистанционно?')">💻 Выключить ПК</button>
         </form>
 
-        <form method="POST" action="index.php">
+        <form method="POST" action="">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="device_id" value="<?=htmlspecialchars($dev_id)?>">
             <button type="submit" class="gray-danger" onclick="return confirm('Удалить компьютер из базы данных панели?')">🗑 Удалить из базы</button>
@@ -221,20 +224,16 @@ th { color:#64748b; font-weight:600; text-transform: uppercase; font-size:11px;}
 </div>
 
 <script>
-// Функция открытия/закрытия консоли процессов
+// Скрипт открытия и закрытия шторки процессов
 function toggleConsole(id) {
     let box = document.getElementById(id);
-    if(box.style.display === "block") {
-        box.style.display = "none";
-    } else {
-        box.style.display = "block";
-    }
+    box.style.display = (box.style.display === "block") ? "none" : "block";
 }
 
-// Железное автообновление страницы (F5) каждые 15 секунд
+// Железное автообновление страницы (F5) ровно каждые 10 секунд
 setInterval(function() {
     location.reload();
-}, 15000);
+}, 10000);
 </script>
 
 </body>
