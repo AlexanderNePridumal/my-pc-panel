@@ -10,7 +10,7 @@ session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
 // !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
-$api = "https://script.google.com/macros/s/ВАШ_ID/exec";
+$api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
