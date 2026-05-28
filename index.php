@@ -4,7 +4,7 @@ session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
 //url
-$api = "https://script.google.com/macros/s/AKfycbxRsRgjvfGlyEsZZYo2U9qDTMnx_JXY9WIaEPgdy8He6eJt3zRf6iLOOAqmC9S63T03/exec";
+$api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
 function getData($url) {
     $ch = curl_init(); 
