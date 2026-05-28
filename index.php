@@ -40,21 +40,27 @@ if (isset($_GET['download_screen'])) {
     echo "Скриншот устарел или еще не получен."; exit;
 }
 
-// ЕДИНЫЙ НАДЕЖНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ КНОПОК
+// ЕДИНЫЙ ВСЕЯДНЫЙ ОБРАБОТЧИК ДЛЯ ВСЕХ КНОПОК
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $action = $_POST["action"] ?? ""; 
-    $device_id = trim($_POST["device_id"] ?? "");
+    $action = isset($_POST["action"]) ? trim($_POST["action"]) : ""; 
+    $device_id = isset($_POST["device_id"]) ? trim($_POST["device_id"]) : "";
 
+    // Шлем ЛЮБУЮ команду, которая пришла из формы, без лишних фильтров
     if (!empty($action) && !empty($device_id)) {
         $ch = curl_init($api); 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(["action" => $action, "device_id" => $device_id])); 
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+            "action" => $action,
+            "device_id" => $device_id
+        ])); 
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 6);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_exec($ch); 
         curl_close($ch);
     }
+    
+    // Перенаправляем обратно, чтобы не было дублей при обновлении
     header("Location: " . $_SERVER['PHP_SELF']); 
     exit;
 }
