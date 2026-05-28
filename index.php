@@ -3,7 +3,7 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
-// !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
+
 $api = "https://script.google.com/macros/s/AKfycbxt9RdUegrIhotBPNQRs6_Nkb3Hy0NF2IJdpL3XyYZXtPbptFhYtUWfAse3Z10VhHCC/exec";
 
 function getData($url) {
