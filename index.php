@@ -174,10 +174,7 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 
 <div class="header">
     <span>🖥 Центральная Панель Управления [INFINITY REALTIME]</span>
-    <div style="display: flex; align-items: center; gap: 15px;">
-        <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд в таблице?')) sendCmdAsync('', 'clear_commands')">🧹 Очистить историю команд</button>
-        <div class="sync-indicator"><span class="dot"></span>Авто-обнаружение (1.5с)</div>
-    </div>
+    <div class="sync-indicator"><span class="dot"></span>Авто-обнаружение (1.5с)</div>
 </div>
 
 <div class="container" id="devices_container">
@@ -185,7 +182,10 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <div class="log-section">
-    <div class="name" style="font-size:15px;">📋 Системные отчеты выполнения (Live)</div>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <div class="name" style="font-size:15px; margin:0;">📋 Системные отчеты выполнения (Live)</div>
+        <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд в таблице?')) sendCmdAsync('', 'clear_commands')">🧹 Очистить историю команд</button>
+    </div>
     <table>
         <thead>
             <tr>
