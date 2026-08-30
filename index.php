@@ -3,10 +3,74 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 
-$api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
+// ЗАДАЙТЕ СВОЙ ПАРОЛЬ ЗДЕСЬ:
+define('PANEL_PASSWORD', '12345'); 
 
+$api = "https://script.google.com/macros/s/AKfycbwDgR5LEV3rc7kiJjGqsa6IQkX4ZOfPWFcyA2appKMzSt8D4j7xUIPLkGhQRyExYw1P/exec";
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
+
+// ОБРАБОТКА ВХОДА ПО ПАРОЛЮ
+$login_error = "";
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login_password'])) {
+    if ($_POST['login_password'] === PANEL_PASSWORD) {
+        $_SESSION['auth'] = true;
+        $_SESSION['expire'] = time() + (30 * 60); // Сессия активна 30 минут
+        header("Location: " . $_SERVER['PHP_SELF']);
+        exit;
+    } else {
+        $login_error = "Неверный пароль!";
+    }
+}
+
+// ПРОВЕРКА АВТОРИЗАЦИИ (Срок действия 30 минут)
+$is_authenticated = false;
+if (isset($_SESSION['auth']) && $_SESSION['auth'] === true) {
+    if (isset($_SESSION['expire']) && time() > $_SESSION['expire']) {
+        session_unset();
+        session_destroy();
+        session_start();
+    } else {
+        $_SESSION['expire'] = time() + (30 * 60); // Продлеваем сессию на 30 минут при активности
+        $is_authenticated = true;
+    }
+}
+
+// ЕСЛИ НЕ АВТОРИЗОВАН — ПОКАЗЫВАЕМ ОКНО ВХОДА
+if (!$is_authenticated) {
+    ?>
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+    <meta charset="UTF-8">
+    <title>Вход — Панель Управления</title>
+    <style>
+        body { margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; display:flex; justify-content:center; align-items:center; height:100vh; }
+        .login-card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:30px; width:320px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align:center; }
+        .login-card h2 { margin-top:0; font-size:20px; color:#f8fafc; }
+        .login-card input { width:100%; padding:12px; margin:15px 0; background:#030712; border:1px solid #374151; border-radius:8px; color:white; box-sizing:border-box; font-size:14px; text-align:center; }
+        .login-card button { width:100%; padding:12px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; transition:0.2s; }
+        .login-card button:hover { background:#4338ca; }
+        .error { color:#ef4444; font-size:13px; margin-bottom:10px; }
+    </style>
+    </head>
+    <body>
+        <div class="login-card">
+            <h2>🔒 Авторизация</h2>
+            <p style="font-size:12px; color:#94a3b8; margin-bottom:20px;">Введите пароль администратора для доступа к панели.</p>
+            <?php if(!empty($login_error)) echo "<div class='error'>$login_error</div>"; ?>
+            <form method="POST">
+                <input type="password" name="login_password" placeholder="Пароль" required autofocus>
+                <button type="submit">Войти в систему</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// ДАЛЕЕ ИДЕТ ОСНОВНОЙ КОД ПАНЕЛИ (ДОСТУПЕН ТОЛЬКО ПОСЛЕ ВХОДА)
 
 // ПОДДЕРЖКА AJAX ЗАПРОСОВ ДЛЯ ОБНОВЛЕНИЯ СТРАНИЦЫ
 if (isset($_GET['api_refresh_all'])) {
@@ -24,7 +88,6 @@ if (isset($_GET['api_refresh_all'])) {
         $last_file_ptr = $cache_dir . $id . '_lastfile.txt';
         $screen_file = __DIR__ . '/screenshots/screen_' . $id . '.jpg';
         
-        // Универсальный парсинг даты для корректного статуса Онлайн
         $time_raw = $d["time"] ?? ""; $last = 0;
         if (!empty($time_raw)) {
             $time_raw = str_replace('T', ' ', $time_raw);
@@ -102,7 +165,7 @@ if (isset($_GET['download_screen'])) {
 }
 
 // ОБРАБОТЧИК КНОПОК ПАНЕЛИ
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     $action = $_POST["action"] ?? ""; 
     $device_id = $_POST["device_id"] ?? ""; 
     $target_path = $_POST["target_path"] ?? "";
@@ -216,6 +279,10 @@ function startRealtimeMonitor() {
         fetch('?api_refresh_all=1')
         .then(res => res.json())
         .then(data => {
+            if (data.error === "unauthorized") {
+                window.location.reload();
+                return;
+            }
             
             // 1. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК ПК
             let container = document.getElementById('devices_container');
@@ -290,7 +357,7 @@ function startRealtimeMonitor() {
             }
 
             // 2. ОБНОВЛЯЕМ ТАБЛИЦУ ОТЧЕТОВ (ЛОГОВ)
-            let logsBody = document.getElementById('live_logs_body');
+            let logsBody = document.digest ? null : document.getElementById('live_logs_body');
             if (logsBody && data.logs) {
                 let logsHtml = '';
                 let activeLogs = data.logs.filter(l => l.id);
