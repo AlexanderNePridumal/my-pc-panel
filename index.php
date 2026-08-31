@@ -34,6 +34,45 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null, $extraHeaders
     return json_decode($res, true) ?: [];
 }
 
+// Функция очистки хранилища Supabase Storage
+function clearSupabaseStorageBucket() {
+    $baseUrl = str_replace('/rest/v1', '', SUPABASE_URL);
+    $headers = [
+        "apikey: " . SUPABASE_KEY,
+        "Authorization: Bearer " . SUPABASE_KEY,
+        "Content-Type: application/json"
+    ];
+
+    // 1. Получаем список всех файлов в бакете 'downloads'
+    $ch = curl_init($baseUrl . '/storage/v1/object/list/downloads');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode(["prefix" => "", "limit" => 1000]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $res = curl_exec($ch);
+    curl_close($ch);
+    
+    $files = json_decode($res, true);
+    if (is_array($files) && count($files) > 0) {
+        $fileNames = [];
+        foreach ($files as $f) {
+            if (isset($f['name'])) {
+                $fileNames[] = $f['name'];
+            }
+        }
+        if (count($fileNames) > 0) {
+            // 2. Массово удаляем найденные файлы
+            $chDel = curl_init($baseUrl . '/storage/v1/object/downloads');
+            curl_setopt($chDel, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($chDel, CURLOPT_CUSTOMREQUEST, 'DELETE');
+            curl_setopt($chDel, CURLOPT_POSTFIELDS, json_encode(["prefixes" => $fileNames]));
+            curl_setopt($chDel, CURLOPT_HTTPHEADER, $headers);
+            curl_exec($chDel);
+            curl_close($chDel);
+        }
+    }
+}
+
 function cleanOldFiles() {
     $folders = [__DIR__ . '/screenshots/', __DIR__ . '/downloads/'];
     foreach ($folders as $dir) {
@@ -185,6 +224,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     if (!empty($action)) {
         if ($action === "clear_commands") {
             supabaseRequest('/commands?id=gt.0', 'DELETE', null, ["Prefer: return=minimal"]);
+        } elseif ($action === "clear_supabase_storage") {
+            clearSupabaseStorageBucket();
         } elseif ($action === "clean_files") {
             cleanOldFiles();
         } else {
@@ -261,8 +302,9 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 <div class="log-section">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
         <div class="name" style="font-size:15px; margin:0;">📋 Системные отчеты выполнения (Live)</div>
-        <div style="display: flex; gap: 8px;">
-            <button type="button" class="orange" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Удалить скриншоты и файлы старше 24 часов?')) sendCmdAsync('', 'clean_files')">🧹 Очистить файлы > 24ч</button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="red" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Вы действительно хотите УДАЛИТЬ ВСЕ файлы из Supabase Storage?')) sendCmdAsync('', 'clear_supabase_storage')">🗑 Очистить Supabase Storage</button>
+            <button type="button" class="orange" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Удалить скриншоты старше 24 часов?')) sendCmdAsync('', 'clean_files')">🧹 Очистить локал. файлы</button>
             <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить историю команд?')) sendCmdAsync('', 'clear_commands')">🗑 Очистить историю</button>
         </div>
     </div>
