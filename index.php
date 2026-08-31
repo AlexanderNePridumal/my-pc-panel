@@ -3,6 +3,7 @@ ob_start();
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 date_default_timezone_set('Europe/Moscow');
+
 // НАСТРОЙКИ SUPABASE
 define('SUPABASE_URL', 'https://bvskbsonxlntkpgywnoh.supabase.co/rest/v1');
 define('SUPABASE_KEY', 'sb_publishable_di1Z96CWhijr9DtO69YMYQ_AJmpg33y');
@@ -35,6 +36,22 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null, $extraHeaders
     $res = curl_exec($ch);
     curl_close($ch);
     return json_decode($res, true) ?: [];
+}
+
+// ФУНКЦИЯ ОЧИСТКИ ФАЙЛОВ СТАРШЕ 24 ЧАСОВ (86400 секунд)
+function cleanOldFiles() {
+    $folders = [__DIR__ . '/screenshots/', __DIR__ . '/downloads/'];
+    foreach ($folders as $dir) {
+        if (is_dir($dir)) {
+            foreach (glob($dir . '*') as $file) {
+                if (is_file($file)) {
+                    if ((time() - filemtime($file)) > 86400) {
+                        @unlink($file);
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ОБРАБОТКА ВХОДА ПО ПАРОЛЮ
@@ -123,7 +140,6 @@ if (isset($_GET['api_refresh_all'])) {
                 }
             }
 
-            // ПК считает в сети, если отправлял сигнал в течение последних 40 секунд
             $isOnline = ((time() - $last) <= 40 && $last > 0);
 
             $explorer_data[$id] = [
@@ -202,6 +218,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     if (!empty($action)) {
         if ($action === "clear_commands") {
             supabaseRequest('/commands?id=gt.0', 'DELETE', null, ["Prefer: return=minimal"]);
+        } elseif ($action === "clean_files") {
+            cleanOldFiles();
         } else {
             if (($action === "get_files" || $action === "download_file") && !empty($target_path)) {
                 $action = $action . "::" . $target_path;
@@ -221,7 +239,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Панель Управления [SUPABASE REALTIME]</title>
+<title>Панель Управления [SUPABASE]</title>
 <style>
 body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; padding-bottom:50px;}
 .header{ padding:18px 24px; background:#0f172a; border-bottom:1px solid #1e293b; font-weight:bold; font-size:19px; display:flex; justify-content:space-between; align-items:center;}
@@ -264,9 +282,12 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <div class="log-section">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
         <div class="name" style="font-size:15px; margin:0;">📋 Системные отчеты выполнения (Live)</div>
-        <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд?')) sendCmdAsync('', 'clear_commands')">🧹 Очистить историю команд</button>
+        <div style="display: flex; gap: 8px;">
+            <button type="button" class="orange" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Удалить скриншоты и файлы старше 24 часов?')) sendCmdAsync('', 'clean_files')">🧹 Очистить файлы > 24ч</button>
+            <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд?')) sendCmdAsync('', 'clear_commands')">🗑 Очистить историю</button>
+        </div>
     </div>
     <table>
         <thead>
@@ -336,7 +357,7 @@ function startRealtimeMonitor() {
 
                     containerHtml += `
                     <div class="${cardClass}">
-                        <div style="display:flex; justify-space-between; align-items:center;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
                             <div class="name">${pc.name}</div>
                             <div class="${statusClass}">${statusText}</div>
                         </div>
