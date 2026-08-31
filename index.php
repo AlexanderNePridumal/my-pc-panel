@@ -2,7 +2,7 @@
 ob_start(); 
 session_start();
 error_reporting(E_ALL); ini_set('display_errors', 1);
-
+date_default_timezone_set('Europe/Moscow');
 // НАСТРОЙКИ SUPABASE
 define('SUPABASE_URL', 'https://bvskbsonxlntkpgywnoh.supabase.co/rest/v1');
 define('SUPABASE_KEY', 'sb_publishable_di1Z96CWhijr9DtO69YMYQ_AJmpg33y');
